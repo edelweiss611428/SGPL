@@ -2,13 +2,11 @@ Package: SGPL
 Type: Package
 Title: Sparse Group Pliable LASSO
 Version: 0.1.0
-Authors@R: c(
-    person(
-      "Minh-Long", "Nguyen",
-      email = "edelweiss611428@gmail.com",
-      role = c("aut", "cre")
-    )
-  )
+Authors@R: 
+    c(
+      person("Minh-Long", "Nguyen",,"edelweiss611428@gmail.com", role = c("aut", "cre")),
+      person("Mohammad-Javad", "Davoudabadi",,"mohammad.davoudabadi@qut.edu.au", role = "aut")
+     )
 Description: Implements sparse group pliable lasso models for
     learning interactions between predictors and modifying variables
     under structured sparsity penalties.
