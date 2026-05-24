@@ -22,8 +22,8 @@
 #' @param bt_max Maximum backtracking iterations.
 #' @param use_screen Logical; use KKT screening rules.
 #' @param verbose Logical; print optimisation progress.
-#' @param beta_init Optional warm-start main effects.
-#' @param Theta_init Optional warm-start interaction effects.
+#' @param beta_init Numeric vector. Optional warm-start main effects.
+#' @param Theta_init Numeric matrix. Optional warm-start interaction effects.
 #' @param standardise Logical; whether or not to standardise X and Z
 #' @return A list containing estimated coefficients and optimization
 #' diagnostics.
