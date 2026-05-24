@@ -61,9 +61,9 @@ Default assigns each modifier to its own group.}
 
 \item{verbose}{Logical; print optimisation progress.}
 
-\item{beta_init}{Optional warm-start main effects.}
+\item{beta_init}{Numeric vector. Optional warm-start main effects.}
 
-\item{Theta_init}{Optional warm-start interaction effects.}
+\item{Theta_init}{Numeric matrix. Optional warm-start interaction effects.}
 
 \item{standardise}{Logical; whether or not to standardise X and Z}
 }
