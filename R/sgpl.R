@@ -24,12 +24,11 @@
 #' @param verbose Logical; print optimisation progress.
 #' @param beta_init Numeric vector. Optional warm-start main effects.
 #' @param Theta_init Numeric matrix. Optional warm-start interaction effects.
-#' @param standardise Logical; whether or not to standardise X and Z
 #' @return A list containing estimated coefficients and optimization
 #' diagnostics.
 #'
 #' @export
-sgpl.fit = function(X, Z, y,
+SGPL_fit = function(X, Z, y,
                     lambda = 0.1, alpha = 0.5,
                     groups_x = NULL, groups_z = NULL,
                     max_iter_out = 200, max_iter_in = 50,
@@ -69,7 +68,7 @@ sgpl.fit = function(X, Z, y,
   groups_x = as.integer(groups_x)
   groups_z = as.integer(groups_z)
 
-  fit = SGPL:::sgpl_fit_rcpp(
+  fit = sgpl_fit_rcpp(
     X = X, Z = Z, y = as.numeric(y),
     lambda = lambda, alpha = alpha,
     groups_x_r = groups_x, groups_z_r = groups_z,
@@ -103,7 +102,7 @@ sgpl.fit = function(X, Z, y,
 #' @return Numeric prediction vector.
 #'
 #' @export
-predict.sgpl = function(X, Z, beta, Theta) {
+SGPL_predict = function(X, Z, beta, Theta) {
   n = nrow(X)
   p = ncol(X)
 
@@ -131,7 +130,7 @@ predict.sgpl = function(X, Z, beta, Theta) {
 #' @param alpha Mixing parameter.
 #'
 #' @return Numeric lambda maximum.
-#'
+#' @importFrom  stats sd uniroot
 #' @export
 compute_lambda_max = function(X, Z, y,
                               groups_x = NULL, groups_z = NULL,
@@ -171,28 +170,22 @@ compute_lambda_max = function(X, Z, y,
   lam_candidates = numeric(L)
 
   for (l in seq_len(L)) {
+
     idx_l = which(groups_x == l)
-
     p_l = pl[l]
-
     X_l = X[, idx_l, drop = FALSE]
-
     g_l = as.numeric(crossprod(X_l, y)) / n
-
     H_l = crossprod(Z, X_l * matrix(y, n, length(idx_l))) / n
-
     v = c(g_l, as.vector(H_l))
 
     kkt_fun = function(lambda) {
-      lam1 = lambda * (1 - alpha)
 
+      lam1 = lambda * (1 - alpha)
       lam2 = lambda * alpha
 
-      sv = sign(v) *
-        pmax(abs(v) - lam2, 0)
+      sv = sign(v) *pmax(abs(v) - lam2, 0)
 
-      sqrt(sum(sv^2)) -
-        sqrt(p_l) * lam1
+      sqrt(sum(sv^2)) - sqrt(p_l) * lam1
     }
 
     upper =
@@ -232,7 +225,7 @@ compute_lambda_max = function(X, Z, y,
 #' @return Cross-validation results and selected lambdas.
 #'
 #' @export
-sgpl.cv = function(X,Z, y,
+SGPL_CV = function(X,Z, y,
                    lambda_seq = NULL, alpha = 0.5,
                    groups_x = NULL, groups_z = NULL,
                    nfolds = 5, max_iter_out = 200, max_iter_in = 50,
@@ -263,7 +256,7 @@ sgpl.cv = function(X,Z, y,
     warm_Theta = NULL
 
     for (li in seq_len(nL)) {
-      fit = sgpl.fit(
+      fit = SGPL_fit(
         X[tr, , drop = FALSE],
         Z[tr, , drop = FALSE],
         y[tr],
@@ -280,7 +273,7 @@ sgpl.cv = function(X,Z, y,
         verbose = FALSE
       )
 
-      yp = predict.sgpl(X[te, , drop = FALSE], Z[te, , drop = FALSE], fit$beta, fit$Theta)
+      yp = SGPL_predict(X[te, , drop = FALSE], Z[te, , drop = FALSE], fit$beta, fit$Theta)
 
       cv_err[f, li] =
         mean((y[te] - yp)^2)
@@ -314,7 +307,7 @@ sgpl.cv = function(X,Z, y,
     cv_error = cv_err
   )
 
-  class(out) = "sgpl.cv"
+  class(out) = "sgpl_cv"
 
   out
 }
