@@ -1,11 +1,14 @@
 #' Sparse Group Pliable Lasso
 #'
 #' Fit a sparse group pliable lasso (SGPL) model using block-wise
-#' coordinate-descent with nested proximal updates
+#' coordinate-descent with nested proximal updates for either Gaussian
+#' or Logistic (binomial) response variables.
 #'
 #' @param X Numeric predictor matrix of dimension \eqn{n \times p}.
 #' @param Z Numeric modifying matrix of dimension \eqn{n \times K}.
-#' @param y Numeric response vector of length \eqn{n}.
+#' @param y Numeric response vector of length \eqn{n}. For \code{family = "binomial"},
+#' this should be a vector containing 0s and 1s.
+#' @param family Model specification; either \code{"gaussian"} or \code{"binomial"}.
 #' @param lambda Regularisation parameter.
 #' @param alpha Mixing parameter between group and lasso penalties.
 #' Must lie in \code{[0, 1]}.
@@ -29,15 +32,19 @@
 #'
 #' @export
 SGPL_fit = function(X, Z, y,
+                    family = c("gaussian", "binomial"),
                     lambda = 0.1, alpha = 0.5,
                     groups_x = NULL, groups_z = NULL,
                     max_iter_out = 200, max_iter_in = 50,
                     tol_out = 1e-6, tol_in = 1e-6,
-                    t_init = NULL,bt_factor = 0.5, bt_max = 50,
+                    t_init = NULL, bt_factor = 0.5, bt_max = 50,
                     use_screen = TRUE, verbose = TRUE,
                     beta_init = NULL, Theta_init = NULL) {
 
-  #data matrix validation
+  # family validation
+  family = match.arg(family)
+
+  # data matrix validation
   if (!is.matrix(X))
     stop("X must be a matrix.")
 
@@ -57,8 +64,14 @@ SGPL_fit = function(X, Z, y,
   if (length(y) != n)
     stop("length(y) must equal nrow(X).")
 
-  # group validation
+  # extra response check for binomial model
+  if (family == "binomial") {
+    if (!all(y %in% c(0, 1))) {
+      stop("For binomial family, y must only contain 0s and 1s.")
+    }
+  }
 
+  # group validation
   if (is.null(groups_x))
     groups_x = seq_len(p)
 
@@ -68,28 +81,49 @@ SGPL_fit = function(X, Z, y,
   groups_x = as.integer(groups_x)
   groups_z = as.integer(groups_z)
 
-  fit = sgpl_fit_rcpp(
-    X = X, Z = Z, y = as.numeric(y),
-    lambda = lambda, alpha = alpha,
-    groups_x_r = groups_x, groups_z_r = groups_z,
-    max_iter_out = max_iter_out,
-    max_iter_in = max_iter_in,
-    tol_out = tol_out,
-    tol_in = tol_in,
-    t_init_r = t_init,
-    bt_factor = bt_factor,
-    bt_max = bt_max,
-    use_screen = use_screen,
-    verbose = verbose,
-    beta_init_r = beta_init,
-    Theta_init_r = Theta_init
-  )
+  # route to the appropriate rcpp solver
+  if (family == "gaussian") {
+    fit = sgpl_fit_rcpp(
+      X = X, Z = Z, y = as.numeric(y),
+      lambda = lambda, alpha = alpha,
+      groups_x_r = groups_x, groups_z_r = groups_z,
+      max_iter_out = max_iter_out,
+      max_iter_in = max_iter_in,
+      tol_out = tol_out,
+      tol_in = tol_in,
+      t_init_r = t_init,
+      bt_factor = bt_factor,
+      bt_max = bt_max,
+      use_screen = use_screen,
+      verbose = verbose,
+      beta_init_r = beta_init,
+      Theta_init_r = Theta_init
+    )
+  } else {
+    fit = sgpl_logistic_fit_rcpp(
+      X = X, Z = Z, y = as.numeric(y),
+      lambda = lambda, alpha = alpha,
+      groups_x_r = groups_x, groups_z_r = groups_z,
+      max_iter_out = max_iter_out,
+      max_iter_in = max_iter_in,
+      tol_out = tol_out,
+      tol_in = tol_in,
+      t_init_r = t_init,
+      bt_factor = bt_factor,
+      bt_max = bt_max,
+      use_screen = use_screen,
+      verbose = verbose,
+      beta_init_r = beta_init,
+      Theta_init_r = Theta_init
+    )
+  }
 
+  # preserve the structural family metadata in the returned object
+  fit$family = family
   class(fit) = "sgpl"
 
   fit
 }
-
 #' Predict from Sparse Group Pliable Lasso
 #'
 #' Generate predictions from an SGPL model.
@@ -203,15 +237,16 @@ compute_lambda_max = function(X, Z, y,
 
   max(lam_candidates)
 }
-
 #' Cross-Validation for SGPL
 #'
 #' Perform K-fold cross-validation for sparse group pliable lasso
-#' models using warm starts along the lambda path.
+#' models using warm starts along the lambda path. Supports both Gaussian
+#' and binomial families.
 #'
 #' @param X Predictor matrix.
 #' @param Z Modifier matrix.
 #' @param y Response vector.
+#' @param family Model specification; either \code{"gaussian"} or \code{"binomial"}.
 #' @param lambda_seq Optional lambda sequence.
 #' @param alpha Mixing parameter.
 #' @param groups_x Predictor groups.
@@ -225,22 +260,34 @@ compute_lambda_max = function(X, Z, y,
 #' @return Cross-validation results and selected lambdas.
 #'
 #' @export
-SGPL_CV = function(X,Z, y,
+SGPL_CV = function(X, Z, y,
+                   family = c("gaussian", "binomial"),
                    lambda_seq = NULL, alpha = 0.5,
                    groups_x = NULL, groups_z = NULL,
                    nfolds = 5, max_iter_out = 200, max_iter_in = 50,
                    tol_out = 1e-5, tol_in = 1e-5) {
+
+  family = match.arg(family)
   n = nrow(X)
 
   if (is.null(lambda_seq)) {
+    # If your lambda_max logic changes based on the family, adjust compute_lambda_max accordingly
     lam_max = compute_lambda_max(X, Z, y, groups_x, groups_z, alpha)
-
     lambda_seq = exp(seq(log(lam_max), log(lam_max * 0.005), length.out = 30))
   }
 
   nL = length(lambda_seq)
 
-  fids = sample(rep(seq_len(nfolds), length.out = n))
+  # Stratify folds if binomial to balance class proportions across folds
+  if (family == "binomial") {
+    fids = integer(n)
+    idx0 = which(y == 0)
+    idx1 = which(y == 1)
+    fids[idx0] = sample(rep(seq_len(nfolds), length.out = length(idx0)))
+    fids[idx1] = sample(rep(seq_len(nfolds), length.out = length(idx1)))
+  } else {
+    fids = sample(rep(seq_len(nfolds), length.out = n))
+  }
 
   cv_err = matrix(NA_real_, nfolds, nL)
 
@@ -248,18 +295,17 @@ SGPL_CV = function(X,Z, y,
     cat(sprintf("CV fold %d / %d\n", f, nfolds))
 
     tr = which(fids != f)
-
     te = which(fids == f)
 
     warm_beta = NULL
-
     warm_Theta = NULL
 
     for (li in seq_len(nL)) {
       fit = SGPL_fit(
-        X[tr, , drop = FALSE],
-        Z[tr, , drop = FALSE],
-        y[tr],
+        X = X[tr, , drop = FALSE],
+        Z = Z[tr, , drop = FALSE],
+        y = y[tr],
+        family = family,
         lambda = lambda_seq[li],
         alpha = alpha,
         groups_x = groups_x,
@@ -273,28 +319,36 @@ SGPL_CV = function(X,Z, y,
         verbose = FALSE
       )
 
-      yp = SGPL_predict(X[te, , drop = FALSE], Z[te, , drop = FALSE], fit$beta, fit$Theta)
+      # Get the raw linear predictor eta
+      eta = SGPL_predict(X[te, , drop = FALSE], Z[te, , drop = FALSE], fit$beta, fit$Theta)
 
-      cv_err[f, li] =
-        mean((y[te] - yp)^2)
+      if (family == "gaussian") {
+        # Mean Squared Error loss
+        cv_err[f, li] = mean((y[te] - eta)^2)
+      } else {
+        # Binomial Deviance loss: -2 * log-likelihood / n_test
+        # Written to avoid log(0) and keep calculation numerically stable
+        logloss = numeric(length(te))
+        pos_idx = eta > 0
+
+        logloss[pos_idx]  = (1 - y[te][pos_idx]) * eta[pos_idx] + log1p(exp(-eta[pos_idx]))
+        logloss[!pos_idx] = -y[te][!pos_idx] * eta[!pos_idx] + log1p(exp(eta[!pos_idx]))
+
+        cv_err[f, li] = 2 * mean(logloss)
+      }
 
       warm_beta = fit$beta
-
       warm_Theta = fit$Theta
     }
   }
 
   cv_mean = colMeans(cv_err)
-
-  cv_se =
-    apply(cv_err, 2, sd) /
-    sqrt(nfolds)
+  cv_se = apply(cv_err, 2, sd) / sqrt(nfolds)
 
   best_idx = which.min(cv_mean)
 
-  idx_1se = which(cv_mean <=
-                    cv_mean[best_idx] +
-                    cv_se[best_idx])[1]
+  # Find 1-standard-error rule lambda
+  idx_1se = which(cv_mean <= cv_mean[best_idx] + cv_se[best_idx])[1]
 
   out = list(
     lambda_seq = lambda_seq,
@@ -304,10 +358,10 @@ SGPL_CV = function(X,Z, y,
     lambda_1se = lambda_seq[idx_1se],
     best_idx = best_idx,
     idx_1se = idx_1se,
-    cv_error = cv_err
+    cv_error = cv_err,
+    family = family
   )
 
   class(out) = "sgpl_cv"
-
   out
 }

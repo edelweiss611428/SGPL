@@ -8,6 +8,7 @@ SGPL_CV(
   X,
   Z,
   y,
+  family = c("gaussian", "binomial"),
   lambda_seq = NULL,
   alpha = 0.5,
   groups_x = NULL,
@@ -25,6 +26,8 @@ SGPL_CV(
 \item{Z}{Modifier matrix.}
 
 \item{y}{Response vector.}
+
+\item{family}{Model specification; either \code{"gaussian"} or \code{"binomial"}.}
 
 \item{lambda_seq}{Optional lambda sequence.}
 
@@ -49,5 +52,6 @@ Cross-validation results and selected lambdas.
 }
 \description{
 Perform K-fold cross-validation for sparse group pliable lasso
-models using warm starts along the lambda path.
+models using warm starts along the lambda path. Supports both Gaussian
+and binomial families.
 }

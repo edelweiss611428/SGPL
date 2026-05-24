@@ -6,25 +6,13 @@ using namespace Rcpp;
 using namespace arma;
 
 
-// HELPER CLASSES
-
 // HELPER FUNCTIONS
 
 // soft threshold (arma::vec and arma::mat)
-
-arma::vec soft_thresh_vec(const arma::vec& x,
-                          double t // t >= 0
-                          ) {
-
+inline arma::vec soft_thresh_vec(const arma::vec& x, double t) {
   arma::vec out(x.n_elem);
-
-  for (int i = 0; i < x.n_elem; i++) {
-
-
+  for (unsigned int i = 0; i < x.n_elem; i++) {
     double xi = x(i);
-
-    // sign(xi) * pmax(abs(xi) - t, 0)
-
     if (xi > t) {
       out(i) = xi - t;
     } else if (xi < -t) {
@@ -32,24 +20,15 @@ arma::vec soft_thresh_vec(const arma::vec& x,
     } else {
       out(i) = 0.0;
     }
-
   }
-
   return out;
 }
 
-arma::mat soft_thresh_mat(const arma::mat& x,
-                          double t // t >= 0
-                          ) {
-
+inline arma::mat soft_thresh_mat(const arma::mat& x, double t) {
   arma::mat out(x.n_rows, x.n_cols);
-
-  for (int i = 0; i < x.n_rows; i++) {
-    for (int j = 0; j < x.n_cols; j++) {
-
+  for (unsigned int i = 0; i < x.n_rows; i++) {
+    for (unsigned int j = 0; j < x.n_cols; j++) {
       double xi = x(i, j);
-      // sign(xi) * pmax(abs(xi) - t, 0)
-
       if (xi > t) {
         out(i, j) = xi - t;
       } else if (xi < -t) {
@@ -57,26 +36,17 @@ arma::mat soft_thresh_mat(const arma::mat& x,
       } else {
         out(i, j) = 0.0;
       }
-
     }
   }
-
   return out;
 }
 
 // block_soft
-
-arma::vec block_soft(
-    const arma::vec& v,
-    double t // t >= 0
-) {
-
+inline arma::vec block_soft(const arma::vec& v, double t) {
   double nv = 0.0;
-
-  for (int i=0; i<v.n_elem; i++) { // sum(v^2)
+  for (unsigned int i = 0; i < v.n_elem; i++) {
     nv += v(i) * v(i);
   }
-
   nv = std::sqrt(nv);
   arma::vec out(v.n_elem);
 
@@ -86,17 +56,15 @@ arma::vec block_soft(
   }
 
   double mult = 1.0 - t / nv;
-
-  for (int i = 0; i < v.n_elem; i++) {
+  for (unsigned int i = 0; i < v.n_elem; i++) {
     out(i) = v(i) * mult;
   }
-
   return out;
 }
 
 // PREDICTION
 
-arma::vec predict_sgpl_cpp(
+inline arma::vec predict_sgpl_cpp(
     const arma::mat& X, // n x p
     const arma::mat& Z, // n x K
     const arma::vec& beta, // p x 1

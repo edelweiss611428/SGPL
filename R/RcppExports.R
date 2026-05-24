@@ -5,3 +5,7 @@ sgpl_fit_rcpp <- function(X, Z, y, lambda = 0.1, alpha = 0.5, groups_x_r = NULL,
     .Call(`_SGPL_sgpl_fit_rcpp`, X, Z, y, lambda, alpha, groups_x_r, groups_z_r, max_iter_out, max_iter_in, tol_out, tol_in, t_init_r, bt_factor, bt_max, use_screen, verbose, beta_init_r, Theta_init_r)
 }
 
+sgpl_logistic_fit_rcpp <- function(X, Z, y, lambda = 0.1, alpha = 0.5, groups_x_r = NULL, groups_z_r = NULL, max_iter_out = 200L, max_iter_in = 50L, tol_out = 1e-6, tol_in = 1e-6, t_init_r = NULL, bt_factor = 0.5, bt_max = 50L, use_screen = TRUE, verbose = TRUE, beta_init_r = NULL, Theta_init_r = NULL) {
+    .Call(`_SGPL_sgpl_logistic_fit_rcpp`, X, Z, y, lambda, alpha, groups_x_r, groups_z_r, max_iter_out, max_iter_in, tol_out, tol_in, t_init_r, bt_factor, bt_max, use_screen, verbose, beta_init_r, Theta_init_r)
+}
+
