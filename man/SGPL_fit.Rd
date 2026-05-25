@@ -8,6 +8,7 @@ SGPL_fit(
   X,
   Z,
   y,
+  family = c("gaussian", "binomial"),
   lambda = 0.1,
   alpha = 0.5,
   groups_x = NULL,
@@ -30,7 +31,10 @@ SGPL_fit(
 
 \item{Z}{Numeric modifying matrix of dimension \eqn{n \times K}.}
 
-\item{y}{Numeric response vector of length \eqn{n}.}
+\item{y}{Numeric response vector of length \eqn{n}. For \code{family = "binomial"},
+this should be a vector containing 0s and 1s.}
+
+\item{family}{Model specification; either \code{"gaussian"} or \code{"binomial"}.}
 
 \item{lambda}{Regularisation parameter.}
 
@@ -71,5 +75,6 @@ diagnostics.
 }
 \description{
 Fit a sparse group pliable lasso (SGPL) model using block-wise
-coordinate-descent with nested proximal updates
+coordinate-descent with nested proximal updates for either Gaussian
+or Logistic (binomial) response variables.
 }
