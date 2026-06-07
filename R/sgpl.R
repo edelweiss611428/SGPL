@@ -82,41 +82,23 @@ SGPL_fit = function(X, Z, y,
   groups_z = as.integer(groups_z)
 
   # route to the appropriate rcpp solver
-  if (family == "gaussian") {
-    fit = sgpl_fit_rcpp(
-      X = X, Z = Z, y = as.numeric(y),
-      lambda = lambda, alpha = alpha,
-      groups_x_r = groups_x, groups_z_r = groups_z,
-      max_iter_out = max_iter_out,
-      max_iter_in = max_iter_in,
-      tol_out = tol_out,
-      tol_in = tol_in,
-      t_init_r = t_init,
-      bt_factor = bt_factor,
-      bt_max = bt_max,
-      use_screen = use_screen,
-      verbose = verbose,
-      beta_init_r = beta_init,
-      Theta_init_r = Theta_init
-    )
-  } else {
-    fit = sgpl_logistic_fit_rcpp(
-      X = X, Z = Z, y = as.numeric(y),
-      lambda = lambda, alpha = alpha,
-      groups_x_r = groups_x, groups_z_r = groups_z,
-      max_iter_out = max_iter_out,
-      max_iter_in = max_iter_in,
-      tol_out = tol_out,
-      tol_in = tol_in,
-      t_init_r = t_init,
-      bt_factor = bt_factor,
-      bt_max = bt_max,
-      use_screen = use_screen,
-      verbose = verbose,
-      beta_init_r = beta_init,
-      Theta_init_r = Theta_init
-    )
-  }
+  fit = sgpl_fit_cpp(
+    X = X, Z = Z, y = as.numeric(y),
+    lambda = lambda, alpha = alpha,
+    groups_x_r = groups_x, groups_z_r = groups_z,
+    max_iter_out = max_iter_out,
+    max_iter_in = max_iter_in,
+    tol_out = tol_out,
+    tol_in = tol_in,
+    t_init_r = t_init,
+    bt_factor = bt_factor,
+    bt_max = bt_max,
+    use_screen = use_screen,
+    verbose = verbose,
+    beta_init_r = beta_init,
+    Theta_init_r = Theta_init,
+    family = family
+  )
 
   # preserve the structural family metadata in the returned object
   fit$family = family
@@ -137,14 +119,13 @@ SGPL_fit = function(X, Z, y,
 #'
 #' @export
 SGPL_predict = function(X, Z, beta, Theta) {
+
   n = nrow(X)
   p = ncol(X)
-
   out = numeric(n)
 
   for (j in seq_len(p)) {
     eta = beta[j] + Z %*% Theta[, j]
-
     out = out + X[, j] * eta
   }
 
@@ -270,8 +251,7 @@ SGPL_CV = function(X, Z, y,
   family = match.arg(family)
   n = nrow(X)
 
-  if (is.null(lambda_seq)) {
-    # If your lambda_max logic changes based on the family, adjust compute_lambda_max accordingly
+  if (is.null(lambda_seq) & family == "gaussian") {
     lam_max = compute_lambda_max(X, Z, y, groups_x, groups_z, alpha)
     lambda_seq = exp(seq(log(lam_max), log(lam_max * 0.005), length.out = 30))
   }
@@ -323,7 +303,7 @@ SGPL_CV = function(X, Z, y,
       eta = SGPL_predict(X[te, , drop = FALSE], Z[te, , drop = FALSE], fit$beta, fit$Theta)
 
       if (family == "gaussian") {
-        # Mean Squared Error loss
+        # MSE
         cv_err[f, li] = mean((y[te] - eta)^2)
       } else {
         # Binomial Deviance loss: -2 * log-likelihood / n_test

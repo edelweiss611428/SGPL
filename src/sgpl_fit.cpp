@@ -1,175 +1,39 @@
 // [[Rcpp::depends(RcppArmadillo)]]
 
 #include <RcppArmadillo.h>
+#include "sgpl_helpers.h"
 
 using namespace Rcpp;
 using namespace arma;
 
 
-// HELPER FUNCTIONS
-
-// soft threshold (arma::vec and arma::mat)
-inline arma::vec soft_thresh_vec(const arma::vec& x, double t) {
-  arma::vec out(x.n_elem);
-  for (unsigned int i = 0; i < x.n_elem; i++) {
-    double xi = x(i);
-    if (xi > t) {
-      out(i) = xi - t;
-    } else if (xi < -t) {
-      out(i) = xi + t;
-    } else {
-      out(i) = 0.0;
-    }
-  }
-  return out;
-}
-
-inline arma::mat soft_thresh_mat(const arma::mat& x, double t) {
-  arma::mat out(x.n_rows, x.n_cols);
-  for (unsigned int i = 0; i < x.n_rows; i++) {
-    for (unsigned int j = 0; j < x.n_cols; j++) {
-      double xi = x(i, j);
-      if (xi > t) {
-        out(i, j) = xi - t;
-      } else if (xi < -t) {
-        out(i, j) = xi + t;
-      } else {
-        out(i, j) = 0.0;
-      }
-    }
-  }
-  return out;
-}
-
-// block_soft
-inline arma::vec block_soft(const arma::vec& v, double t) {
-  double nv = 0.0;
-  for (unsigned int i = 0; i < v.n_elem; i++) {
-    nv += v(i) * v(i);
-  }
-  nv = std::sqrt(nv);
-  arma::vec out(v.n_elem);
-
-  if (!std::isfinite(nv) || nv <= t) {
-    out.zeros();
-    return out;
-  }
-
-  double mult = 1.0 - t / nv;
-  for (unsigned int i = 0; i < v.n_elem; i++) {
-    out(i) = v(i) * mult;
-  }
-  return out;
-}
-
-// PREDICTION
-
-inline arma::vec predict_sgpl_cpp(
-    const arma::mat& X, // n x p
-    const arma::mat& Z, // n x K
-    const arma::vec& beta, // p x 1
-    const arma::mat& Theta // K x p
-) {
-
-  arma::mat M = Z * Theta;              // n x p
-
-  // add beta to each row of M
-  M.each_row() += beta.t();
-
-  // elementwise product + row sums
-  return arma::sum(X % M, 1);
-}
-
-// OBJECTIVE
-
+// [[Rcpp::export]]
 double objective_sgpl_cpp(
-    const arma::mat& X, // n x p
-    const arma::mat& Z, // n x K
-    const arma::vec& y, // n x 1
-    const arma::vec& beta, // p x 1
-    const arma::mat& Theta, // K x p
-    double lambda,
-    double alpha,
-    const arma::uvec& groups_x,
-    const arma::uvec& groups_z
+    const arma::mat& X, const arma::mat& Z, const arma::vec& y,
+    const arma::vec& beta, const arma::mat& Theta,
+    double lambda, double alpha,
+    const arma::uvec& groups_x, const arma::uvec& groups_z,
+    std::string family
 ) {
 
-  int n = X.n_rows;
-  int p = X.n_cols;
   int K = Z.n_cols;
+  arma::vec pred = predict_sgpl_cpp(X, Z, beta, Theta);
+  double loss;
 
-  unsigned int L = groups_x.max();
-  unsigned int G = groups_z.max();
-
-  arma::vec pl(L);
-  arma::vec pg(G);
-
-  pl.zeros();
-  pg.zeros();
-
-  for (int i = 0; i < groups_x.n_elem; i++) {
-    pl(groups_x(i) - 1) += 1.0;
+  if(family == "gaussian"){
+    loss = compute_gaussian_loss(y, pred);
+  } else if (family == "binomial"){
+    loss = compute_logistic_loss(y, pred);
   }
 
-  for (int i = 0; i < groups_z.n_elem; i++) {
-    pg(groups_z(i) - 1) += 1.0;
-  }
-
-  double lam1 = lambda * (1.0 - alpha);
-  double lam2 = lambda * alpha;
-
-  arma::vec pred = predict_sgpl_cpp(X, Z, beta,Theta);
-  arma::vec resid = y - pred;
-  double rss = arma::dot(resid, resid) / (2.0 * n);
-  arma::mat Theta2 = arma::square(Theta);
-
-  // per-variable prediction penalty
-  double per_pred = lam1 * arma::accu(arma::sqrt(arma::square(beta) + arma::sum(Theta2, 0).t()));
-  double joint_grp = 0.0;
-
-  for (int l = 1; l <= L; l++) {
-    // to be modified (pre-computed for objective_sgpl and sgpl_fit
-    arma::uvec idx = arma::find(groups_x == l);
-    if (idx.n_elem > 0) {
-      arma::vec svec = arma::square(beta.elem(idx)) + arma::sum(Theta2.cols(idx), 0).t();
-      joint_grp += std::sqrt(pl(l - 1)) * std::sqrt(arma::accu(svec));
-    }
-
-  }
-
-  joint_grp *= lam1;
-  double z_grp = 0.0;
-  double w_denom = std::sqrt(1.0 + K);
-
-  for (int l = 1; l <= L; l++) {
-
-    arma::uvec idx_l = arma::find(groups_x == l);
-    if (idx_l.n_elem == 0) continue;
-
-    for (int g = 1; g <= G; g++) {
-
-      arma::uvec idx_g = arma::find(groups_z == g);
-      if (idx_g.n_elem == 0) continue;
-      arma::mat sub = Theta2.submat(idx_g, idx_l);
-      double s = arma::accu(sub);
-      z_grp += std::sqrt(pg(g - 1)) / w_denom * std::sqrt(s);
-
-    }
-
-  }
-
-  z_grp *= lam1;
-  double l1_b = lam2 * arma::accu(arma::abs(beta));
-  double l1_t = lam2 * arma::accu(arma::abs(Theta));
-
-  return rss + per_pred + joint_grp + z_grp + l1_b + l1_t;
+  // Shared penalties
+  double penalty = compute_sgpl_penalties(beta, Theta, lambda, alpha, groups_x, groups_z, K);
+  return loss + penalty;
 }
 
-// sgpl_fit_rcpp
 
 // [[Rcpp::export]]
-
-Rcpp::List sgpl_fit_rcpp(
+Rcpp::List sgpl_fit_cpp(
     const arma::mat& X, const arma::mat& Z, const arma::vec& y,
     double lambda = 0.1, double alpha = 0.5,
     Rcpp::Nullable<arma::uvec> groups_x_r = R_NilValue,
@@ -180,16 +44,18 @@ Rcpp::List sgpl_fit_rcpp(
     double bt_factor = 0.5, int bt_max = 50,
     bool use_screen = true, bool verbose = true,
     Rcpp::Nullable<arma::vec> beta_init_r = R_NilValue,
-    Rcpp::Nullable<arma::mat> Theta_init_r = R_NilValue
-) {
+    Rcpp::Nullable<arma::mat> Theta_init_r = R_NilValue,
+    std::string family = "gaussian"
+){
+
 
   int n = X.n_rows;
   int p = X.n_cols;
   int K = Z.n_cols;
 
-  // dimension checks
+  // Dimension checks
 
-  // data
+  // Data
 
   if ((int)Z.n_rows != n) {
     stop("X and Z must have same number of rows");
@@ -199,11 +65,11 @@ Rcpp::List sgpl_fit_rcpp(
     stop("length(y) must equal nrow(X)");
   }
 
-  // groups
+  // Groups
   arma::uvec groups_x;
   arma::uvec groups_z;
 
-  // if null then each feature forms a group
+  // If group is null then each feature forms a group
 
   if (groups_x_r.isNull()) {
 
@@ -261,10 +127,8 @@ Rcpp::List sgpl_fit_rcpp(
 
   unsigned int L = groups_x.max();
   unsigned int G = groups_z.max();
-
   arma::vec pl(L);
   arma::vec pg(G);
-
   pl.zeros();
   pg.zeros();
 
@@ -278,42 +142,23 @@ Rcpp::List sgpl_fit_rcpp(
 
   double lam1 = lambda * (1.0 - alpha); // redundant - to be removed later
   double lam2 = lambda * alpha;
-
-  double t_init;
-
-  if (t_init_r.isNull()) {
-    // column-wise squared norms
-    arma::rowvec x_norm2 = arma::sum(arma::square(X), 0); // 1 x p
-    arma::rowvec z_norm2 = arma::sum(arma::square(Z), 0); // 1 x K
-
-    double max_xnorm2 = x_norm2.max();
-    double max_znorm2 = z_norm2.max();
-
-    double Lf = (max_xnorm2 * (1.0 + max_znorm2)) / X.n_rows;
-    t_init = 1.0 / Lf;
-  } else {
-    t_init = Rcpp::as<double>(t_init_r);
-  }
+  double t_init = compute_t_init(X,Z,t_init_r,family);
 
   arma::vec obj_path(max_iter_out);
-
   bool converged = false;
   int n_iter = max_iter_out;
 
-  // outer loop
+  // outer-loop (block coordinate descent)
 
   for (int iter_out = 0; iter_out < max_iter_out; iter_out++) {
-
     arma::vec beta_old = beta;
     arma::mat Theta_old = Theta;
 
     for (int l = 1; l <= L; l++) {
-
       // group indices
-
       std::vector<unsigned int> idx_l_vec;
 
-      // to be modified later (pre-computed for objective_sgpl and sgpl_fit
+      // future versions consider pre-computing group indexes
       for (int j = 0; j < p; j++) {
         if (groups_x(j) == l) {
           idx_l_vec.push_back(j);
@@ -324,68 +169,52 @@ Rcpp::List sgpl_fit_rcpp(
       arma::mat X_l(n, p_l);
 
       for (int jj = 0; jj < p_l; jj++) {
-
         int j = idx_l_vec[jj];
-
         for (int i = 0; i < n; i++) {
           X_l(i, jj) = X(i, j);
         }
-
       }
 
       // partial residual
-
 
       arma::vec r_neg_l = y;
 
       // future versions consider pre-computation
       for (int lp = 1; lp <= L; lp++) {
-
         if (lp == l) continue;
 
         for (int j = 0; j < p; j++) {
-
           if (groups_x(j) == lp) {
-
             for (int i = 0; i < n; i++) {
-
               double eta = beta(j);
-
               for (int k = 0; k < K; k++) {
                 eta += Z(i, k) * Theta(k, j);
               }
-
               r_neg_l(i) -= X(i, j) * eta;
             }
           }
         }
+
       }
 
-      // KKT screening
+      // KKT screening (currently developed for gaussian only)
 
-      if (use_screen) {
+      if (use_screen && family == "gaussian") {
 
         arma::vec g_l(p_l);
         arma::mat H_l(K, p_l);
 
         for (int jj = 0; jj < p_l; jj++) {
-
           double s = 0.0;
-
           for (int i = 0; i < n; i++) {
             s += X_l(i, jj) * r_neg_l(i);
           }
-
           g_l(jj) = s / n;
-
           for (int k = 0; k < K; k++) {
-
             double sk = 0.0;
-
             for (int i = 0; i < n; i++) {
               sk += Z(i, k) * X_l(i, jj) * r_neg_l(i);
             }
-
             H_l(k, jj) = sk / n;
           }
         }
@@ -399,9 +228,7 @@ Rcpp::List sgpl_fit_rcpp(
         unsigned int ctr = g_l.n_elem;
 
         for (int j = 0; j < H_l.n_cols;j++) {
-
           for (int k = 0;k < H_l.n_rows;k++) {
-
             vv(ctr) = H_l(k, j);
             ctr++;
           }
@@ -418,12 +245,9 @@ Rcpp::List sgpl_fit_rcpp(
         nv = std::sqrt(nv);
 
         if (nv <= std::sqrt((double)p_l) * lam1) {
-
           for (int jj = 0; jj < p_l; jj++) {
-
             int j = idx_l_vec[jj];
             beta(j) = 0.0;
-
             for (int k = 0; k < K; k++) {
               Theta(k, j) = 0.0;
             }
@@ -439,11 +263,8 @@ Rcpp::List sgpl_fit_rcpp(
       arma::mat Theta_l_tilde(K, p_l);
 
       for (int jj = 0; jj < p_l; jj++) {
-
         int j = idx_l_vec[jj];
-
         beta_l_tilde(jj) = beta(j);
-
         for (int k = 0; k < K; k++) {
           Theta_l_tilde(k, jj) = Theta(k, j);
         }
@@ -460,48 +281,17 @@ Rcpp::List sgpl_fit_rcpp(
 
         // block residual
 
-        arma::vec r_l = r_neg_l;
+        arma::vec eta_l = y - r_neg_l;
 
         for (int jj = 0; jj < p_l; jj++) {
-
-          for (int i = 0; i < n; i++) {
-
-            double eta  = beta_l_tilde(jj);
-
-            for (int k = 0; k < K; k++) {
-              eta += Z(i, k) * Theta_l_tilde(k, jj);
-            }
-
-            r_l(i) -= X_l(i, jj) * eta;
-          }
+          arma::vec eta_j = beta_l_tilde(jj) + Z * Theta_l_tilde.col(jj);
+          eta_l += X_l.col(jj) % eta_j;
         }
 
-        // gradient
+        // Accurately compute gradients using native linear space eta_l vectors
+        arma::vec gb = gradient_smooth_loss_beta(X_l, y, eta_l, n, family);
+        arma::mat gT = gradient_smooth_loss_theta(X_l, Z, y, eta_l, p_l, K, n, family);
 
-        arma::vec gb(p_l);
-        arma::mat gT(K, p_l);
-
-        for (int jj = 0; jj < p_l; jj++) {
-
-          double s = 0.0;
-
-          for (int i = 0; i < n; i++) {
-            s += X_l(i, jj) * r_l(i);
-          }
-
-          gb(jj) = -s / n;
-
-          for (int k = 0; k < K; k++) {
-
-            double sk = 0.0;
-
-            for (int i = 0; i < n; i++) {
-              sk += Z(i, k) * X_l(i, jj) * r_l(i);
-            }
-
-            gT(k, jj) = -sk / n;
-          }
-        }
 
         bool bt_ok = false;
 
@@ -523,7 +313,6 @@ Rcpp::List sgpl_fit_rcpp(
           // predictor block shrinkage
 
           for (int jj = 0; jj < p_l; jj++) {
-
             arma::vec vv(1 + K);
             vv(0) = beta_try(jj);
 
@@ -532,7 +321,6 @@ Rcpp::List sgpl_fit_rcpp(
             }
 
             vv = block_soft(vv, t_l * lam1);
-
             beta_try(jj) = vv(0);
 
             for (int k = 0; k < K; k++) {
@@ -555,15 +343,11 @@ Rcpp::List sgpl_fit_rcpp(
             }
 
             int ng = idxg.size();
-
             arma::vec vv(ng * p_l);
-
             int ctr = 0;
 
             for (int jj = 0; jj < p_l; jj++) {
-
               for (int kk = 0; kk < ng; kk++) {
-
                 vv(ctr) = Theta_try( idxg[kk], jj);
                 ctr++;
               }
@@ -574,9 +358,7 @@ Rcpp::List sgpl_fit_rcpp(
             ctr = 0;
 
             for (int jj = 0;jj < p_l;jj++) {
-
               for (int kk = 0; kk < ng; kk++) {
-
                 Theta_try( idxg[kk], jj) = vv(ctr);
                 ctr++;
 
@@ -595,12 +377,9 @@ Rcpp::List sgpl_fit_rcpp(
           int ctr = p_l;
 
           for (int jj = 0; jj < p_l; jj++) {
-
             for (int k = 0; k < K; k++) {
-
               vv(ctr) = Theta_try(k, jj);
               ctr++;
-
             }
           }
 
@@ -613,9 +392,7 @@ Rcpp::List sgpl_fit_rcpp(
           ctr = p_l;
 
           for (int jj = 0; jj < p_l; jj++) {
-
             for (int k = 0; k < K; k++) {
-
               Theta_try(k, jj) = vv(ctr);
               ctr++;
             }
@@ -630,36 +407,25 @@ Rcpp::List sgpl_fit_rcpp(
           arma::mat Theta_cand = Theta;
 
           for (int jj = 0; jj < p_l; jj++) {
-
             int j = idx_l_vec[jj];
             beta_cand(j) = beta_l_new(jj);
             Theta_cand.col(j) = Theta_l_new.col(jj);
-
           }
 
-          double obj_cand =
-            objective_sgpl_cpp(X, Z, y,
-              beta_cand, Theta_cand, lambda, alpha,
-              groups_x, groups_z
-            );
+          double obj_cand = objective_sgpl_cpp(X, Z, y, beta_cand, Theta_cand, lambda, alpha,
+                                               groups_x, groups_z, family);
 
           arma::vec beta_curr = beta;
           arma::mat Theta_curr = Theta;
 
           for (int jj = 0; jj < p_l; jj++) {
-
             int j = idx_l_vec[jj];
-
             beta_curr(j) = beta_l_tilde(jj);
             Theta_curr.col(j) = Theta_l_tilde.col(jj);
           }
 
-          double obj_curr =
-            objective_sgpl_cpp(X, Z, y,
-              beta_curr, Theta_curr,
-              lambda, alpha,
-              groups_x, groups_z
-            );
+          double obj_curr = objective_sgpl_cpp(X, Z, y, beta_curr, Theta_curr, lambda, alpha,
+                                               groups_x, groups_z, family);
 
           if (obj_cand <= obj_curr + 1e-12) {
             bt_ok = true;
@@ -670,7 +436,6 @@ Rcpp::List sgpl_fit_rcpp(
         }
 
         beta_l_tilde = beta_l_new;
-
         Theta_l_tilde = Theta_l_new;
 
         double delta_in = 0.0;
@@ -687,9 +452,7 @@ Rcpp::List sgpl_fit_rcpp(
         for (int jj = 0; jj < p_l; jj++) {
 
           for (int k = 0;k < K; k++) {
-
             double d = std::abs(Theta_l_tilde(k, jj) - Theta_l_old(k, jj));
-
             if (d > delta_in) {
               delta_in = d;
             }
@@ -706,32 +469,26 @@ Rcpp::List sgpl_fit_rcpp(
       for (int jj = 0; jj < p_l; jj++) {
 
         int j = idx_l_vec[jj];
-
         beta(j) = beta_l_tilde(jj);
         Theta.col(j) = Theta_l_tilde.col(jj);
       }
     }
 
-    // convergence
+    // Check outer convergence
 
-    obj_path(iter_out) = objective_sgpl_cpp(X, Z, y, beta, Theta, lambda, alpha, groups_x,
-                         groups_z);
-
+    obj_path(iter_out) = objective_sgpl_cpp(X, Z, y, beta, Theta, lambda, alpha,
+             groups_x, groups_z, family);
     double delta_out = 0.0;
 
     for (int j = 0; j < p; j++) {
-
       double d = std::abs(beta(j) - beta_old(j));
-
       if (d > delta_out) {
         delta_out = d;
       }
     }
 
     for (int j = 0; j < p; j++) {
-
       for (int k = 0; k < K; k++) {
-
         double d = std::abs(Theta(k, j) - Theta_old(k, j));
 
         if (d > delta_out) {
@@ -741,19 +498,10 @@ Rcpp::List sgpl_fit_rcpp(
     }
 
     if (verbose && ((iter_out + 1) % 10 == 0 || iter_out == 0)) {
-
-      Rcout
-      << "Outer "
-      << (iter_out + 1)
-      << " obj="
-      << obj_path(iter_out)
-      << " delta="
-      << delta_out
-      << "\n";
+      Rcout << "Outer " << (iter_out + 1) << " obj=" << obj_path(iter_out) << " delta=" << delta_out << "\n";
     }
 
     if (delta_out < tol_out && iter_out > 0) {
-
       converged = true;
       n_iter = iter_out + 1;
       break;
@@ -777,7 +525,9 @@ Rcpp::List sgpl_fit_rcpp(
     Named("groups_x") = groups_x,
     Named("groups_z") = groups_z
   );
+
 }
+
 
 
 
