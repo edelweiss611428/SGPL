@@ -62,62 +62,10 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// compute_cox_loss_cpp
-double compute_cox_loss_cpp(const arma::vec& y_time, const arma::vec& status, const arma::vec& eta, int n);
-RcppExport SEXP _SGPL_compute_cox_loss_cpp(SEXP y_timeSEXP, SEXP statusSEXP, SEXP etaSEXP, SEXP nSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::vec& >::type y_time(y_timeSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type status(statusSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type eta(etaSEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    rcpp_result_gen = Rcpp::wrap(compute_cox_loss_cpp(y_time, status, eta, n));
-    return rcpp_result_gen;
-END_RCPP
-}
-// gradient_smooth_loss_beta_cpp
-arma::vec gradient_smooth_loss_beta_cpp(const arma::mat& X_l, const arma::vec& y, const arma::vec& eta_l, int n, const std::string& family, const Rcpp::Nullable<arma::vec>& status);
-RcppExport SEXP _SGPL_gradient_smooth_loss_beta_cpp(SEXP X_lSEXP, SEXP ySEXP, SEXP eta_lSEXP, SEXP nSEXP, SEXP familySEXP, SEXP statusSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type X_l(X_lSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type eta_l(eta_lSEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< const std::string& >::type family(familySEXP);
-    Rcpp::traits::input_parameter< const Rcpp::Nullable<arma::vec>& >::type status(statusSEXP);
-    rcpp_result_gen = Rcpp::wrap(gradient_smooth_loss_beta_cpp(X_l, y, eta_l, n, family, status));
-    return rcpp_result_gen;
-END_RCPP
-}
-// gradient_smooth_loss_theta_cpp
-arma::mat gradient_smooth_loss_theta_cpp(const arma::mat& X_l, const arma::mat& Z, const arma::vec& y, const arma::vec& eta_l, int p_l, int K, int n, const std::string& family, const Rcpp::Nullable<arma::vec>& status);
-RcppExport SEXP _SGPL_gradient_smooth_loss_theta_cpp(SEXP X_lSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP eta_lSEXP, SEXP p_lSEXP, SEXP KSEXP, SEXP nSEXP, SEXP familySEXP, SEXP statusSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::mat& >::type X_l(X_lSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type Z(ZSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type eta_l(eta_lSEXP);
-    Rcpp::traits::input_parameter< int >::type p_l(p_lSEXP);
-    Rcpp::traits::input_parameter< int >::type K(KSEXP);
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< const std::string& >::type family(familySEXP);
-    Rcpp::traits::input_parameter< const Rcpp::Nullable<arma::vec>& >::type status(statusSEXP);
-    rcpp_result_gen = Rcpp::wrap(gradient_smooth_loss_theta_cpp(X_l, Z, y, eta_l, p_l, K, n, family, status));
-    return rcpp_result_gen;
-END_RCPP
-}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_SGPL_objective_sgpl_cpp", (DL_FUNC) &_SGPL_objective_sgpl_cpp, 11},
     {"_SGPL_sgpl_fit_cpp", (DL_FUNC) &_SGPL_sgpl_fit_cpp, 20},
-    {"_SGPL_compute_cox_loss_cpp", (DL_FUNC) &_SGPL_compute_cox_loss_cpp, 4},
-    {"_SGPL_gradient_smooth_loss_beta_cpp", (DL_FUNC) &_SGPL_gradient_smooth_loss_beta_cpp, 6},
-    {"_SGPL_gradient_smooth_loss_theta_cpp", (DL_FUNC) &_SGPL_gradient_smooth_loss_theta_cpp, 9},
     {NULL, NULL, 0}
 };
 

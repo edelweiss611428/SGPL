@@ -9,15 +9,3 @@ sgpl_fit_cpp <- function(X, Z, y, lambda = 0.1, alpha = 0.5, groups_x_r = NULL, 
     .Call(`_SGPL_sgpl_fit_cpp`, X, Z, y, lambda, alpha, groups_x_r, groups_z_r, max_iter_out, max_iter_in, tol_out, tol_in, t_init_r, bt_factor, bt_max, use_screen, verbose, beta_init_r, Theta_init_r, family, status)
 }
 
-compute_cox_loss_cpp <- function(y_time, status, eta, n) {
-    .Call(`_SGPL_compute_cox_loss_cpp`, y_time, status, eta, n)
-}
-
-gradient_smooth_loss_beta_cpp <- function(X_l, y, eta_l, n, family, status = NULL) {
-    .Call(`_SGPL_gradient_smooth_loss_beta_cpp`, X_l, y, eta_l, n, family, status)
-}
-
-gradient_smooth_loss_theta_cpp <- function(X_l, Z, y, eta_l, p_l, K, n, family, status = NULL) {
-    .Call(`_SGPL_gradient_smooth_loss_theta_cpp`, X_l, Z, y, eta_l, p_l, K, n, family, status)
-}
-
