@@ -12,8 +12,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // objective_sgpl_cpp
-double objective_sgpl_cpp(const arma::mat& X, const arma::mat& Z, const arma::vec& y, const arma::vec& beta, const arma::mat& Theta, double lambda, double alpha, const arma::uvec& groups_x, const arma::uvec& groups_z, std::string family);
-RcppExport SEXP _SGPL_objective_sgpl_cpp(SEXP XSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP betaSEXP, SEXP ThetaSEXP, SEXP lambdaSEXP, SEXP alphaSEXP, SEXP groups_xSEXP, SEXP groups_zSEXP, SEXP familySEXP) {
+double objective_sgpl_cpp(const arma::mat& X, const arma::mat& Z, const arma::vec& y, const arma::vec& beta, const arma::mat& Theta, double lambda, double alpha, const arma::uvec& groups_x, const arma::uvec& groups_z, std::string family, Rcpp::Nullable<arma::vec> status);
+RcppExport SEXP _SGPL_objective_sgpl_cpp(SEXP XSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP betaSEXP, SEXP ThetaSEXP, SEXP lambdaSEXP, SEXP alphaSEXP, SEXP groups_xSEXP, SEXP groups_zSEXP, SEXP familySEXP, SEXP statusSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -27,13 +27,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::uvec& >::type groups_x(groups_xSEXP);
     Rcpp::traits::input_parameter< const arma::uvec& >::type groups_z(groups_zSEXP);
     Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
-    rcpp_result_gen = Rcpp::wrap(objective_sgpl_cpp(X, Z, y, beta, Theta, lambda, alpha, groups_x, groups_z, family));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<arma::vec> >::type status(statusSEXP);
+    rcpp_result_gen = Rcpp::wrap(objective_sgpl_cpp(X, Z, y, beta, Theta, lambda, alpha, groups_x, groups_z, family, status));
     return rcpp_result_gen;
 END_RCPP
 }
 // sgpl_fit_cpp
-Rcpp::List sgpl_fit_cpp(const arma::mat& X, const arma::mat& Z, const arma::vec& y, double lambda, double alpha, Rcpp::Nullable<arma::uvec> groups_x_r, Rcpp::Nullable<arma::uvec> groups_z_r, int max_iter_out, int max_iter_in, double tol_out, double tol_in, Rcpp::Nullable<double> t_init_r, double bt_factor, int bt_max, bool use_screen, bool verbose, Rcpp::Nullable<arma::vec> beta_init_r, Rcpp::Nullable<arma::mat> Theta_init_r, std::string family);
-RcppExport SEXP _SGPL_sgpl_fit_cpp(SEXP XSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP lambdaSEXP, SEXP alphaSEXP, SEXP groups_x_rSEXP, SEXP groups_z_rSEXP, SEXP max_iter_outSEXP, SEXP max_iter_inSEXP, SEXP tol_outSEXP, SEXP tol_inSEXP, SEXP t_init_rSEXP, SEXP bt_factorSEXP, SEXP bt_maxSEXP, SEXP use_screenSEXP, SEXP verboseSEXP, SEXP beta_init_rSEXP, SEXP Theta_init_rSEXP, SEXP familySEXP) {
+Rcpp::List sgpl_fit_cpp(const arma::mat& X, const arma::mat& Z, const arma::vec& y, double lambda, double alpha, Rcpp::Nullable<arma::uvec> groups_x_r, Rcpp::Nullable<arma::uvec> groups_z_r, int max_iter_out, int max_iter_in, double tol_out, double tol_in, Rcpp::Nullable<double> t_init_r, double bt_factor, int bt_max, bool use_screen, bool verbose, Rcpp::Nullable<arma::vec> beta_init_r, Rcpp::Nullable<arma::mat> Theta_init_r, std::string family, Rcpp::Nullable<arma::vec> status);
+RcppExport SEXP _SGPL_sgpl_fit_cpp(SEXP XSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP lambdaSEXP, SEXP alphaSEXP, SEXP groups_x_rSEXP, SEXP groups_z_rSEXP, SEXP max_iter_outSEXP, SEXP max_iter_inSEXP, SEXP tol_outSEXP, SEXP tol_inSEXP, SEXP t_init_rSEXP, SEXP bt_factorSEXP, SEXP bt_maxSEXP, SEXP use_screenSEXP, SEXP verboseSEXP, SEXP beta_init_rSEXP, SEXP Theta_init_rSEXP, SEXP familySEXP, SEXP statusSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -56,14 +57,67 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<arma::vec> >::type beta_init_r(beta_init_rSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type Theta_init_r(Theta_init_rSEXP);
     Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
-    rcpp_result_gen = Rcpp::wrap(sgpl_fit_cpp(X, Z, y, lambda, alpha, groups_x_r, groups_z_r, max_iter_out, max_iter_in, tol_out, tol_in, t_init_r, bt_factor, bt_max, use_screen, verbose, beta_init_r, Theta_init_r, family));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<arma::vec> >::type status(statusSEXP);
+    rcpp_result_gen = Rcpp::wrap(sgpl_fit_cpp(X, Z, y, lambda, alpha, groups_x_r, groups_z_r, max_iter_out, max_iter_in, tol_out, tol_in, t_init_r, bt_factor, bt_max, use_screen, verbose, beta_init_r, Theta_init_r, family, status));
+    return rcpp_result_gen;
+END_RCPP
+}
+// compute_cox_loss_cpp
+double compute_cox_loss_cpp(const arma::vec& y_time, const arma::vec& status, const arma::vec& eta, int n);
+RcppExport SEXP _SGPL_compute_cox_loss_cpp(SEXP y_timeSEXP, SEXP statusSEXP, SEXP etaSEXP, SEXP nSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type y_time(y_timeSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type status(statusSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type eta(etaSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_cox_loss_cpp(y_time, status, eta, n));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gradient_smooth_loss_beta_cpp
+arma::vec gradient_smooth_loss_beta_cpp(const arma::mat& X_l, const arma::vec& y, const arma::vec& eta_l, int n, const std::string& family, const Rcpp::Nullable<arma::vec>& status);
+RcppExport SEXP _SGPL_gradient_smooth_loss_beta_cpp(SEXP X_lSEXP, SEXP ySEXP, SEXP eta_lSEXP, SEXP nSEXP, SEXP familySEXP, SEXP statusSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X_l(X_lSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type eta_l(eta_lSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type family(familySEXP);
+    Rcpp::traits::input_parameter< const Rcpp::Nullable<arma::vec>& >::type status(statusSEXP);
+    rcpp_result_gen = Rcpp::wrap(gradient_smooth_loss_beta_cpp(X_l, y, eta_l, n, family, status));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gradient_smooth_loss_theta_cpp
+arma::mat gradient_smooth_loss_theta_cpp(const arma::mat& X_l, const arma::mat& Z, const arma::vec& y, const arma::vec& eta_l, int p_l, int K, int n, const std::string& family, const Rcpp::Nullable<arma::vec>& status);
+RcppExport SEXP _SGPL_gradient_smooth_loss_theta_cpp(SEXP X_lSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP eta_lSEXP, SEXP p_lSEXP, SEXP KSEXP, SEXP nSEXP, SEXP familySEXP, SEXP statusSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X_l(X_lSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Z(ZSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type eta_l(eta_lSEXP);
+    Rcpp::traits::input_parameter< int >::type p_l(p_lSEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type family(familySEXP);
+    Rcpp::traits::input_parameter< const Rcpp::Nullable<arma::vec>& >::type status(statusSEXP);
+    rcpp_result_gen = Rcpp::wrap(gradient_smooth_loss_theta_cpp(X_l, Z, y, eta_l, p_l, K, n, family, status));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_SGPL_objective_sgpl_cpp", (DL_FUNC) &_SGPL_objective_sgpl_cpp, 10},
-    {"_SGPL_sgpl_fit_cpp", (DL_FUNC) &_SGPL_sgpl_fit_cpp, 19},
+    {"_SGPL_objective_sgpl_cpp", (DL_FUNC) &_SGPL_objective_sgpl_cpp, 11},
+    {"_SGPL_sgpl_fit_cpp", (DL_FUNC) &_SGPL_sgpl_fit_cpp, 20},
+    {"_SGPL_compute_cox_loss_cpp", (DL_FUNC) &_SGPL_compute_cox_loss_cpp, 4},
+    {"_SGPL_gradient_smooth_loss_beta_cpp", (DL_FUNC) &_SGPL_gradient_smooth_loss_beta_cpp, 6},
+    {"_SGPL_gradient_smooth_loss_theta_cpp", (DL_FUNC) &_SGPL_gradient_smooth_loss_theta_cpp, 9},
     {NULL, NULL, 0}
 };
 
