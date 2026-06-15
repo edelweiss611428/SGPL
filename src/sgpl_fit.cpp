@@ -462,6 +462,8 @@ Rcpp::List sgpl_fit_cpp(
         if (delta_in < tol_in) {
           break;
         }
+
+
       }
 
       // accept update
