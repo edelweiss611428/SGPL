@@ -142,7 +142,7 @@ Rcpp::List sgpl_fit_cpp(
 
   double lam1 = lambda * (1.0 - alpha); // redundant - to be removed later
   double lam2 = lambda * alpha;
-  double t_init = compute_t_init(X,Z,t_init_r,family);
+  double t_init = compute_t_init(X,Z,t_init_r,family); //update this for cox
 
   arma::vec obj_path(max_iter_out);
   bool converged = false;
@@ -288,6 +288,7 @@ Rcpp::List sgpl_fit_cpp(
           eta_l += X_l.col(jj) % eta_j;
         }
 
+        // future versions consider pre-computation in evaluation of block residuals
         // Accurately compute gradients using native linear space eta_l vectors
         arma::vec gb = gradient_smooth_loss_beta(X_l, y, eta_l, n, family);
         arma::mat gT = gradient_smooth_loss_theta(X_l, Z, y, eta_l, p_l, K, n, family);
@@ -428,7 +429,7 @@ Rcpp::List sgpl_fit_cpp(
                                                groups_x, groups_z, family);
 
           if (obj_cand <= obj_curr + 1e-12) {
-            bt_ok = true;
+            bt_ok = true; //redundant
             break;
           }
 
@@ -439,6 +440,8 @@ Rcpp::List sgpl_fit_cpp(
         Theta_l_tilde = Theta_l_new;
 
         double delta_in = 0.0;
+
+        // abs
 
         for (int jj = 0; jj < p_l;jj++) {
 
