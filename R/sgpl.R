@@ -34,7 +34,7 @@
 #'
 #' @export
 SGPL_fit = function(X, Z, y,
-                    family = c("gaussian", "binomial", "cox"),
+                    family = c("gaussian", "binomial"),
                     lambda = 0.1, alpha = 0.5,
                     groups_x = NULL, groups_z = NULL,
                     max_iter_out = 200, max_iter_in = 50,
