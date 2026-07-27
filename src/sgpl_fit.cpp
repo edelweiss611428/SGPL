@@ -138,7 +138,7 @@ Rcpp::List sgpl_fit_cpp(
   if (beta0_init_r.isNotNull()) {
     beta0 = Rcpp::as<double>(beta0_init_r);
   } else {
-    if (family == "binomial" || family == "logit") {
+    if (family == "binomial") {
       double p_bar = arma::mean(y);
       p_bar = std::min(std::max(p_bar, 1e-5), 1.0 - 1e-5);
       beta0 = std::log(p_bar / (1.0 - p_bar));
@@ -186,17 +186,20 @@ Rcpp::List sgpl_fit_cpp(
     arma::vec theta0_old = theta0;
 
     // update intercepts after first block pass (or if no user-provided intercepts)
+    if (iter_out > 0 || (beta0_init_r.isNull() && theta0_init_r.isNull())) {
 
-    if (family == "gaussian") { //future version merges some of binomial and gaussian
-      update_intercepts_gaussian(X, Z, y, beta, Theta, beta0, theta0);
-    } else if (family == "binomial") {
-      arma::mat M = Z * Theta;
-      M.each_row() += beta.t();
-      arma::vec eta_pen = arma::sum(X % M, 1);
-      update_intercepts_logit(Z, y, eta_pen, beta0, theta0);
-    } else {
-      beta0 = 0.0;
-      theta0.zeros();
+      if (family == "gaussian") { //future version merges some of binomial and gaussian
+        update_intercepts_gaussian(X, Z, y, beta, Theta, beta0, theta0);
+      } else if (family == "binomial") {
+        arma::mat M = Z * Theta;
+        M.each_row() += beta.t();
+        arma::vec eta_pen = arma::sum(X % M, 1);
+        update_intercepts_logit(Z, y, eta_pen, beta0, theta0);
+      } else {
+        beta0 = 0.0;
+        theta0.zeros();
+      }
+
     }
 
 
@@ -565,6 +568,8 @@ Rcpp::List sgpl_fit_cpp(
   return Rcpp::List::create(
     Named("beta") = beta,
     Named("Theta") = Theta,
+    Named("beta0") = beta0,
+    Named("theta0") = theta0,
     Named("obj_path") = final_obj,
     Named("converged") = converged,
     Named("n_iter") = n_iter,

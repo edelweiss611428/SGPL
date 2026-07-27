@@ -4,7 +4,7 @@
 \alias{SGPL_predict}
 \title{Predict from Sparse Group Pliable Lasso}
 \usage{
-SGPL_predict(X, Z, beta, Theta)
+SGPL_predict(X, Z, beta, Theta, beta0 = 0, theta0 = NULL)
 }
 \arguments{
 \item{X}{Predictor matrix.}
@@ -14,6 +14,10 @@ SGPL_predict(X, Z, beta, Theta)
 \item{beta}{Main effect coefficients.}
 
 \item{Theta}{Interaction coefficient matrix.}
+
+\item{beta0}{Numeric scalar; overall intercept. Default is 0.}
+
+\item{theta0}{Numeric vector of length \eqn{K}; modifier intercept vector. Default is 0s.}
 }
 \value{
 Numeric prediction vector.

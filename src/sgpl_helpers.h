@@ -66,20 +66,19 @@ inline arma::vec predict_sgpl_cpp(
     const arma::vec& beta, // p x 1
     const arma::mat& Theta, // K x p
     double beta0 = 0.0,
-    Rcpp::Nullable<arma::vec> theta0_r = R_NilValue
+    const arma::vec& theta0 = arma::vec() // not nullablle
 ) {
 
   int n = X.n_rows;
-  int K = Z.n_cols;
+  //base intercept
 
-  //init theta0 to 0 unless provided
-  arma::vec theta0(K, arma::fill::zeros);
-  if (theta0_r.isNotNull()) {
-    theta0 = Rcpp::as<arma::vec>(theta0_r);
+  arma::vec eta = arma::vec(n, arma::fill::value(beta0));
+
+  if (!theta0.is_empty() && theta0.n_elem > 0) {
+    eta += Z * theta0;
   }
 
-
-  arma::vec eta = beta0 + Z * theta0; //init intercept contribution
+  // might not safe
   arma::mat M = Z * Theta;              // n x p
   M.each_row() += beta.t();
   eta += arma::sum(X % M, 1);
