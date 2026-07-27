@@ -142,7 +142,7 @@ Rcpp::List sgpl_fit_cpp(
       double p_bar = arma::mean(y);
       p_bar = std::min(std::max(p_bar, 1e-5), 1.0 - 1e-5);
       beta0 = std::log(p_bar / (1.0 - p_bar));
-    } else if (family == "gaussian" || family == "Gaus") {
+    } else if (family == "gaussian") {
       beta0 = arma::mean(y);
     }
   }
