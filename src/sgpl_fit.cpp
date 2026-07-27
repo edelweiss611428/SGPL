@@ -14,9 +14,9 @@ double objective_sgpl_cpp(
     double beta0, const arma::vec& theta0,
     double lambda, double alpha,
     const arma::uvec& groups_x, const arma::uvec& groups_z,
-    std::string family
+    std::string family,
+    Rcpp::Nullable<arma::vec> status = R_NilValue // Added parameter
 ) {
-
   int K = Z.n_cols;
   arma::vec pred = predict_sgpl_cpp(X, Z, beta, Theta, beta0, theta0);
   double loss;
@@ -25,13 +25,14 @@ double objective_sgpl_cpp(
     loss = compute_gaussian_loss(y, pred);
   } else if (family == "binomial"){
     loss = compute_logistic_loss(y, pred);
+  } else if (family == "cox") {
+    if (status.isNull()) stop("status is required for family='cox'");
+    loss = compute_cox_loss(y, as<arma::vec>(status), pred, X.n_rows);
   }
 
-  // Shared penalties
   double penalty = compute_sgpl_penalties(beta, Theta, lambda, alpha, groups_x, groups_z, K);
   return loss + penalty;
 }
-
 
 // [[Rcpp::export]]
 Rcpp::List sgpl_fit_cpp(
@@ -55,6 +56,26 @@ Rcpp::List sgpl_fit_cpp(
   int n = X.n_rows;
   int p = X.n_cols;
   int K = Z.n_cols;
+
+  // for Cox
+
+  if (family == "Cox") {
+    if (status.isNull()) {
+      stop("status is required for family='Cox'");
+    }
+
+    arma::vec status_vec = Rcpp::as<arma::vec>(status);
+
+    if ((int)status_vec.n_elem != n) {
+      stop("length(status) must equal nrow(X)");
+    }
+
+    arma::uvec mask = (status_vec != 0) % (status_vec != 1);
+    arma::uvec invalid = arma::find(mask == 1);
+    if (invalid.n_elem > 0) {
+      stop("status must be coded as 0/1");
+    }
+  }
 
   // Dimension checks
 
@@ -346,8 +367,8 @@ Rcpp::List sgpl_fit_cpp(
 
         // future versions consider pre-computation in evaluation of block residuals
         // Accurately compute gradients using native linear space eta_l vectors
-        arma::vec gb = gradient_smooth_loss_beta(X_l, y, eta_l, n, family);
-        arma::mat gT = gradient_smooth_loss_theta(X_l, Z, y, eta_l, p_l, K, n, family);
+        arma::vec gb = gradient_smooth_loss_beta(X_l, y, eta_l, n, family, status);
+        arma::mat gT = gradient_smooth_loss_theta(X_l, Z, y, eta_l, p_l, K, n, family, status);
 
 
         bool bt_ok = false;
@@ -523,6 +544,8 @@ Rcpp::List sgpl_fit_cpp(
         if (delta_in < tol_in) {
           break;
         }
+
+
       }
 
       // accept update
