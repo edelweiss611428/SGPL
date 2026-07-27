@@ -11,13 +11,14 @@ using namespace arma;
 double objective_sgpl_cpp(
     const arma::mat& X, const arma::mat& Z, const arma::vec& y,
     const arma::vec& beta, const arma::mat& Theta,
+    double beta0, const arma::vec& theta0,
     double lambda, double alpha,
     const arma::uvec& groups_x, const arma::uvec& groups_z,
     std::string family
 ) {
 
   int K = Z.n_cols;
-  arma::vec pred = predict_sgpl_cpp(X, Z, beta, Theta);
+  arma::vec pred = predict_sgpl_cpp(X, Z, beta, Theta, beta0, theta0);
   double loss;
 
   if(family == "gaussian"){
@@ -45,6 +46,8 @@ Rcpp::List sgpl_fit_cpp(
     bool use_screen = true, bool verbose = true,
     Rcpp::Nullable<arma::vec> beta_init_r = R_NilValue,
     Rcpp::Nullable<arma::mat> Theta_init_r = R_NilValue,
+    Rcpp::Nullable<double> beta0_init_r = R_NilValue,
+    Rcpp::Nullable<arma::vec> theta0_init_r = R_NilValue,
     std::string family = "gaussian"
 ){
 
@@ -58,11 +61,11 @@ Rcpp::List sgpl_fit_cpp(
   // Data
 
   if ((int)Z.n_rows != n) {
-    stop("X and Z must have same number of rows");
+    Rcpp::stop("X and Z must have same number of rows");
   }
 
   if ((int)y.n_elem != n) {
-    stop("length(y) must equal nrow(X)");
+    Rcpp::stop("length(y) must equal nrow(X)");
   }
 
   // Groups
@@ -85,7 +88,7 @@ Rcpp::List sgpl_fit_cpp(
       Rcpp::as<arma::uvec>(groups_x_r);
 
     if ((int)groups_x.n_elem != p) {
-      stop("groups_x has incorrect length");
+      Rcpp::stop("groups_x has incorrect length");
     }
   }
 
@@ -99,10 +102,12 @@ Rcpp::List sgpl_fit_cpp(
   } else {
     groups_z = Rcpp::as<arma::uvec>(groups_z_r);
     if ((int)groups_z.n_elem != K) {
-      stop("groups_z has incorrect length");
+      Rcpp::stop("groups_z has incorrect length");
     }
   }
 
+
+  // initialise penalised params
   arma::vec beta;
 
   if (beta_init_r.isNull()) {
@@ -110,7 +115,7 @@ Rcpp::List sgpl_fit_cpp(
   } else {
     beta = Rcpp::as<arma::vec>(beta_init_r);
     if ((int)beta.n_elem != p) {
-      stop("beta_init has incorrect length");
+      Rcpp::stop("beta_init has incorrect length");
     }
   }
 
@@ -124,6 +129,30 @@ Rcpp::List sgpl_fit_cpp(
       stop("Theta_init has incorrect dimensions");
     }
   }
+
+  // initialise intercepts
+
+  double beta0 = 0.0;
+  arma::vec theta0(K, arma::fill::zeros);
+
+  if (beta0_init_r.isNotNull()) {
+    beta0 = Rcpp::as<double>(beta0_init_r);
+  } else {
+    if (family == "binomial" || family == "logit") {
+      double p_bar = arma::mean(y);
+      p_bar = std::min(std::max(p_bar, 1e-5), 1.0 - 1e-5);
+      beta0 = std::log(p_bar / (1.0 - p_bar));
+    } else if (family == "gaussian" || family == "Gaus") {
+      beta0 = arma::mean(y);
+    }
+  }
+
+  if (theta0_init_r.isNotNull()) {
+    theta0 = Rcpp::as<arma::vec>(theta0_init_r);
+    if ((int)theta0.n_elem != K) stop("theta0_init has incorrect length");
+  }
+
+  // helpers
 
   unsigned int L = groups_x.max();
   unsigned int G = groups_z.max();
@@ -153,6 +182,23 @@ Rcpp::List sgpl_fit_cpp(
   for (int iter_out = 0; iter_out < max_iter_out; iter_out++) {
     arma::vec beta_old = beta;
     arma::mat Theta_old = Theta;
+    double beta0_old = beta0;
+    arma::vec theta0_old = theta0;
+
+    // update intercepts after first block pass (or if no user-provided intercepts)
+
+    if (family == "gaussian") { //future version merges some of binomial and gaussian
+      update_intercepts_gaussian(X, Z, y, beta, Theta, beta0, theta0);
+    } else if (family == "binomial") {
+      arma::mat M = Z * Theta;
+      M.each_row() += beta.t();
+      arma::vec eta_pen = arma::sum(X % M, 1);
+      update_intercepts_logit(Z, y, eta_pen, beta0, theta0);
+    } else {
+      beta0 = 0.0;
+      theta0.zeros();
+    }
+
 
     for (int l = 1; l <= L; l++) {
       // group indices
@@ -177,7 +223,14 @@ Rcpp::List sgpl_fit_cpp(
 
       // partial residual
 
-      arma::vec r_neg_l = y;
+      arma::vec r_neg_l(n);
+      for (int i = 0; i < n; i++) {
+        double eta_0 = beta0;
+        for (int k = 0; k < K; k++) {
+          eta_0 += Z(i, k) * theta0(k);
+        }
+        r_neg_l(i) = y(i) - eta_0;
+      }
 
       // future versions consider pre-computation
       for (int lp = 1; lp <= L; lp++) {
@@ -413,7 +466,8 @@ Rcpp::List sgpl_fit_cpp(
             Theta_cand.col(j) = Theta_l_new.col(jj);
           }
 
-          double obj_cand = objective_sgpl_cpp(X, Z, y, beta_cand, Theta_cand, lambda, alpha,
+          double obj_cand = objective_sgpl_cpp(X, Z, y, beta_cand, Theta_cand, beta0, theta0,
+                                               lambda, alpha,
                                                groups_x, groups_z, family);
 
           arma::vec beta_curr = beta;
@@ -425,7 +479,8 @@ Rcpp::List sgpl_fit_cpp(
             Theta_curr.col(j) = Theta_l_tilde.col(jj);
           }
 
-          double obj_curr = objective_sgpl_cpp(X, Z, y, beta_curr, Theta_curr, lambda, alpha,
+          double obj_curr = objective_sgpl_cpp(X, Z, y, beta_curr, Theta_curr, beta0, theta0,
+                                               lambda, alpha,
                                                groups_x, groups_z, family);
 
           if (obj_cand <= obj_curr + 1e-12) {
@@ -479,26 +534,16 @@ Rcpp::List sgpl_fit_cpp(
 
     // Check outer convergence
 
-    obj_path(iter_out) = objective_sgpl_cpp(X, Z, y, beta, Theta, lambda, alpha,
-             groups_x, groups_z, family);
-    double delta_out = 0.0;
+    obj_path(iter_out) = objective_sgpl_cpp(X, Z, y, beta, Theta, beta0, theta0,
+             lambda, alpha, groups_x, groups_z, family);
 
-    for (int j = 0; j < p; j++) {
-      double d = std::abs(beta(j) - beta_old(j));
-      if (d > delta_out) {
-        delta_out = d;
-      }
-    }
 
-    for (int j = 0; j < p; j++) {
-      for (int k = 0; k < K; k++) {
-        double d = std::abs(Theta(k, j) - Theta_old(k, j));
-
-        if (d > delta_out) {
-          delta_out = d;
-        }
-      }
-    }
+    double delta_out = std::max({
+      arma::max(arma::abs(beta - beta_old)),
+      arma::max(arma::vectorise(arma::abs(Theta - Theta_old))),
+      std::abs(beta0 - beta0_old),
+      arma::max(arma::abs(theta0 - theta0_old))
+    }); // update delta_out (compact version)
 
     if (verbose && ((iter_out + 1) % 10 == 0 || iter_out == 0)) {
       Rcout << "Outer " << (iter_out + 1) << " obj=" << obj_path(iter_out) << " delta=" << delta_out << "\n";

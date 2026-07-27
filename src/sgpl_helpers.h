@@ -96,11 +96,7 @@ inline double compute_gaussian_loss(const arma::vec& y, const arma::vec& pred) {
   return arma::dot(resid, resid) / (2.0 * y.n_elem);
 }
 
-<<<<<<< Updated upstream
-=======
-
 // logistic loss (eta is prediction in linear)
->>>>>>> Stashed changes
 inline double compute_logistic_loss(const arma::vec& y, const arma::vec& eta) {
   double logloss = 0.0;
   int n = y.n_elem;
@@ -263,7 +259,6 @@ inline arma::mat gradient_smooth_loss_theta(
 
   arma::mat gT(K, p_l);
 
-<<<<<<< Updated upstream
    // Vectorised interaction modifier gradients: gT_j = - (Z^T * (X_l_j % r_l)) / n
    for (int jj = 0; jj < p_l; jj++) {
      gT.col(jj) = - (Z.t() * (X_l.col(jj) % r_l)) / n;
@@ -271,7 +266,7 @@ inline arma::mat gradient_smooth_loss_theta(
 
    return gT;
  }
-=======
+
 
 // intercept estimators (void functions - wont return anything but will directly modify beta0, theta0)
 
@@ -341,5 +336,5 @@ inline void update_intercepts_logit(
   theta0 = coefs.subvec(1, K);
   theta0.replace(arma::datum::nan, 0.0);
 }
->>>>>>> Stashed changes
+
 #endif // SGPL_HELPERS_H
