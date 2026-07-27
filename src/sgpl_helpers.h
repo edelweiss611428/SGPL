@@ -85,8 +85,6 @@ inline double compute_gaussian_loss(const arma::vec& y, const arma::vec& pred) {
   return arma::dot(resid, resid) / (2.0 * y.n_elem);
 }
 
-
-// logistic loss
 inline double compute_logistic_loss(const arma::vec& y, const arma::vec& eta) {
   double logloss = 0.0;
   int n = y.n_elem;
@@ -98,29 +96,6 @@ inline double compute_logistic_loss(const arma::vec& y, const arma::vec& eta) {
     }
   }
   return logloss / n;
-}
-
-// cox loss
-inline double compute_cox_loss(
-    const arma::vec& y_time,
-    const arma::vec& status,
-    const arma::vec& eta,
-    int n
-) {
-  double loss = 0.0;
-  arma::uvec events = arma::find(status == 1);
-
-  if (events.n_elem == 0) return 0.0;
-
-  for (unsigned int i = 0; i < events.n_elem; ++i) {
-    int idx = events(i);
-    arma::uvec risk = arma::find(y_time >= y_time(idx));
-    arma::vec eta_risk = eta.elem(risk);
-
-    double m = eta_risk.max();
-    loss += (m + std::log(arma::accu(arma::exp(eta_risk - m)))) - eta(idx);
-  }
-  return loss / n;
 }
 
 // Compute sgpl penalties
@@ -231,37 +206,22 @@ inline double compute_sgpl_penalties(
 // gradient functions
 // separate functions for beta and Theta for efficiency
 
-// w.r.t. beta
 inline arma::vec gradient_smooth_loss_beta(
     const arma::mat& X_l,
-    const arma::vec& y,           // y or y_time
+    const arma::vec& y,
     const arma::vec& eta_l,
     int n,
-    const std::string& family,
-    const Rcpp::Nullable<arma::vec>& status = R_NilValue // Optional status for Cox
+    const std::string& family
 ) {
-  if (family == "cox") {
-    arma::vec status_vec = Rcpp::as<arma::vec>(status);
-    arma::vec gb(X_l.n_cols, arma::fill::zeros);
-    arma::uvec events = arma::find(status_vec == 1);
-
-    for (unsigned int i = 0; i < events.n_elem; ++i) {
-      int idx = events(i);
-      arma::uvec risk = arma::find(y >= y(idx));
-      arma::vec w = arma::exp(eta_l.elem(risk) - eta_l.elem(risk).max());
-      double sw = arma::accu(w);
-      gb -= (X_l.row(idx).t() - (X_l.rows(risk).t() * w) / sw);
-    }
-    return gb / n;
-  }
-
   arma::vec r_l(n);
+
   if (family == "gaussian") {
     r_l = y - eta_l;
   } else if (family == "binomial") {
     arma::vec prob_l = 1.0 / (1.0 + arma::exp(-eta_l));
     r_l = y - prob_l;
   }
+
   return - (X_l.t() * r_l) / n;
 }
 
@@ -269,35 +229,15 @@ inline arma::vec gradient_smooth_loss_beta(
 inline arma::mat gradient_smooth_loss_theta(
     const arma::mat& X_l,
     const arma::mat& Z,
-    const arma::vec& y,           // y or y_time
-    const arma::vec& eta_l,
+    const arma::vec& y,
+    const arma::vec& eta_l, // full linear predictor for the block
     int p_l,
     int K,
     int n,
-    const std::string& family,
-    const Rcpp::Nullable<arma::vec>& status = R_NilValue // Optional status for Cox
-) {
-  if (family == "cox") {
-    arma::vec status_vec = Rcpp::as<arma::vec>(status);
-    arma::mat gT(K, p_l, arma::fill::zeros);
-    arma::uvec events = arma::find(status_vec == 1);
-
-    for (unsigned int i = 0; i < events.n_elem; ++i) {
-      int idx = events(i);
-      arma::uvec risk = arma::find(y >= y(idx));
-      arma::vec w = arma::exp(eta_l.elem(risk) - eta_l.elem(risk).max());
-      double sw = arma::accu(w);
-
-      arma::mat zxbar(K, p_l, arma::fill::zeros);
-      for(unsigned int r = 0; r < risk.n_elem; ++r) {
-        zxbar += w(r) * (Z.row(risk(r)).t() * X_l.row(risk(r)));
-      }
-      gT -= (Z.row(idx).t() * X_l.row(idx) - (zxbar / sw));
-    }
-    return gT / n;
-  }
-
+    const std::string& family
+){
   arma::vec r_l(n);
+
   if (family == "gaussian") {
     r_l = y - eta_l;
   } else if (family == "binomial"){
@@ -306,10 +246,12 @@ inline arma::mat gradient_smooth_loss_theta(
   }
 
   arma::mat gT(K, p_l);
-  for (int jj = 0; jj < p_l; jj++) {
-    gT.col(jj) = - (Z.t() * (X_l.col(jj) % r_l)) / n;
-  }
-  return gT;
-}
 
+   // Vectorised interaction modifier gradients: gT_j = - (Z^T * (X_l_j % r_l)) / n
+   for (int jj = 0; jj < p_l; jj++) {
+     gT.col(jj) = - (Z.t() * (X_l.col(jj) % r_l)) / n;
+   }
+
+   return gT;
+ }
 #endif // SGPL_HELPERS_H
