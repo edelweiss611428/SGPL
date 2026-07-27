@@ -8,7 +8,7 @@ SGPL_fit(
   X,
   Z,
   y,
-  family = c("gaussian", "binomial"),
+  family = c("gaussian", "binomial", "cox"),
   lambda = 0.1,
   alpha = 0.5,
   groups_x = NULL,
@@ -22,6 +22,8 @@ SGPL_fit(
   bt_max = 50,
   use_screen = TRUE,
   verbose = TRUE,
+  beta0_init = NULL,
+  theta0_init = NULL,
   beta_init = NULL,
   Theta_init = NULL
 )
@@ -64,6 +66,10 @@ Default assigns each modifier to its own group.}
 \item{use_screen}{Logical; use KKT screening rules.}
 
 \item{verbose}{Logical; print optimisation progress.}
+
+\item{beta0_init}{Numeric scalar. Optional warm-start main intercept.}
+
+\item{theta0_init}{Numeric vector of length \eqn{K}. Optional warm-start modifier intercept vector.}
 
 \item{beta_init}{Numeric vector. Optional warm-start main effects.}
 

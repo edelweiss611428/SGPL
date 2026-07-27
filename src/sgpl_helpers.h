@@ -58,22 +58,32 @@ inline arma::vec block_soft(const arma::vec& v, double t) {
   return out;
 }
 
-// PREDICTION
+// Linear prediction
 
 inline arma::vec predict_sgpl_cpp(
     const arma::mat& X, // n x p
     const arma::mat& Z, // n x K
     const arma::vec& beta, // p x 1
-    const arma::mat& Theta // K x p
+    const arma::mat& Theta, // K x p
+    double beta0 = 0.0,
+    const arma::vec& theta0 = arma::vec() // not nullablle
 ) {
 
+  int n = X.n_rows;
+  //base intercept
+
+  arma::vec eta = arma::vec(n, arma::fill::value(beta0));
+
+  if (!theta0.is_empty() && theta0.n_elem > 0) {
+    eta += Z * theta0;
+  }
+
+  // might not safe
   arma::mat M = Z * Theta;              // n x p
-
-  // add beta to each row of M
   M.each_row() += beta.t();
+  eta += arma::sum(X % M, 1);
 
-  // elementwise product + row sums
-  return arma::sum(X % M, 1);
+  return eta; //prediction
 }
 
 
@@ -85,6 +95,7 @@ inline double compute_gaussian_loss(const arma::vec& y, const arma::vec& pred) {
   return arma::dot(resid, resid) / (2.0 * y.n_elem);
 }
 
+// logistic loss (eta is prediction in linear)
 inline double compute_logistic_loss(const arma::vec& y, const arma::vec& eta) {
   double logloss = 0.0;
   int n = y.n_elem;
@@ -172,7 +183,7 @@ inline double compute_sgpl_penalties(
 }
 
 
-//' Compute Initial Step Size (1 / Lipschitz constant) based on family arg
+//' Compute initial step size (1 / Lipschitz constant) based on family arg
  inline double compute_t_init(
      const arma::mat& X,
      const arma::mat& Z,
@@ -254,4 +265,75 @@ inline arma::mat gradient_smooth_loss_theta(
 
    return gT;
  }
+
+
+// intercept estimators (void functions - wont return anything but will directly modify beta0, theta0)
+
+inline void update_intercepts_gaussian(
+    const arma::mat& X, const arma::mat& Z, const arma::vec& y,
+    const arma::vec& beta, const arma::mat& Theta,
+    double& beta0, arma::vec& theta0
+) {
+
+  int n = X.n_rows;
+  arma::mat M = Z * Theta;
+  M.each_row() += beta.t();
+  arma::vec fitted_pen = arma::sum(X % M, 1);
+  arma::vec r0 = y - fitted_pen; //manual computation of fitted values without intercept contribution
+  // could call predict_sgpl_cpp as well but a bit slower
+  // int K = Z.n_cols;
+  // arma::vec fitted_pen = predict_sgpl_cpp(X<Z,beta, Theta, 0.0, arma::vec theta0(K, arma::fill::zeros));
+
+  arma::mat DesignMat = arma::join_rows(arma::ones<arma::vec>(n), Z);
+  arma::vec coefs;
+  bool success = arma::solve(coefs, DesignMat, r0); // solve OLS problem to coefs
+  // might be problematic if DesignMat too large -> still solvable but might see warning (not errors and crashed the env)
+
+  if (success) {
+    beta0 = coefs(0); // OLS -> beta0 will be intecept of the aboved OLS problem
+    theta0 = coefs.subvec(1, Z.n_cols);
+    theta0.replace(arma::datum::nan, 0.0);
+  }
+
+  // this is not safe -> i might inject noise into this (ridge style)
+}
+
+inline void update_intercepts_logit(
+    const arma::mat& Z, const arma::vec& y, const arma::vec& eta_pen,
+    double& beta0, arma::vec& theta0, int max_irls = 25, double tol = 1e-8
+) {
+  int n = Z.n_rows;
+  int K = Z.n_cols;
+  arma::mat W_design = arma::join_rows(arma::ones<arma::vec>(n), Z);
+  arma::vec coefs(1 + K, arma::fill::zeros); // prevent division by 0
+  coefs(0) = beta0;
+  if ((int)theta0.n_elem == K) coefs.subvec(1, K) = theta0;
+
+  for (int iter = 0; iter < max_irls; iter++) {
+    arma::vec eta = W_design * coefs + eta_pen;
+    arma::vec p = 1.0 / (1.0 + arma::exp(-eta));
+    p = arma::clamp(p, 1e-15, 1.0 - 1e-15);
+
+    arma::vec w = p % (1.0 - p);
+    arma::vec z_adj = (eta - eta_pen) + (y - p) / w;
+
+    arma::mat WX = W_design;
+    WX.each_col() %= arma::sqrt(w);
+    arma::vec Wz = z_adj % arma::sqrt(w);
+
+    arma::vec coefs_new;
+    if (!arma::solve(coefs_new, WX, Wz)) break;
+
+    if (arma::max(arma::abs(coefs_new - coefs)) < tol) {
+      coefs = coefs_new;
+      break;
+    }
+    coefs = coefs_new;
+  }
+
+  beta0 = coefs(0);
+  theta0 = coefs.subvec(1, K);
+  theta0.replace(arma::datum::nan, 0.0);
+}
+
 #endif // SGPL_HELPERS_H

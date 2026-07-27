@@ -12,8 +12,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // objective_sgpl_cpp
-double objective_sgpl_cpp(const arma::mat& X, const arma::mat& Z, const arma::vec& y, const arma::vec& beta, const arma::mat& Theta, double lambda, double alpha, const arma::uvec& groups_x, const arma::uvec& groups_z, std::string family);
-RcppExport SEXP _SGPL_objective_sgpl_cpp(SEXP XSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP betaSEXP, SEXP ThetaSEXP, SEXP lambdaSEXP, SEXP alphaSEXP, SEXP groups_xSEXP, SEXP groups_zSEXP, SEXP familySEXP) {
+double objective_sgpl_cpp(const arma::mat& X, const arma::mat& Z, const arma::vec& y, const arma::vec& beta, const arma::mat& Theta, double beta0, const arma::vec& theta0, double lambda, double alpha, const arma::uvec& groups_x, const arma::uvec& groups_z, std::string family);
+RcppExport SEXP _SGPL_objective_sgpl_cpp(SEXP XSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP betaSEXP, SEXP ThetaSEXP, SEXP beta0SEXP, SEXP theta0SEXP, SEXP lambdaSEXP, SEXP alphaSEXP, SEXP groups_xSEXP, SEXP groups_zSEXP, SEXP familySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -22,18 +22,20 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::vec& >::type y(ySEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type beta(betaSEXP);
     Rcpp::traits::input_parameter< const arma::mat& >::type Theta(ThetaSEXP);
+    Rcpp::traits::input_parameter< double >::type beta0(beta0SEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type theta0(theta0SEXP);
     Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
     Rcpp::traits::input_parameter< const arma::uvec& >::type groups_x(groups_xSEXP);
     Rcpp::traits::input_parameter< const arma::uvec& >::type groups_z(groups_zSEXP);
     Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
-    rcpp_result_gen = Rcpp::wrap(objective_sgpl_cpp(X, Z, y, beta, Theta, lambda, alpha, groups_x, groups_z, family));
+    rcpp_result_gen = Rcpp::wrap(objective_sgpl_cpp(X, Z, y, beta, Theta, beta0, theta0, lambda, alpha, groups_x, groups_z, family));
     return rcpp_result_gen;
 END_RCPP
 }
 // sgpl_fit_cpp
-Rcpp::List sgpl_fit_cpp(const arma::mat& X, const arma::mat& Z, const arma::vec& y, double lambda, double alpha, Rcpp::Nullable<arma::uvec> groups_x_r, Rcpp::Nullable<arma::uvec> groups_z_r, int max_iter_out, int max_iter_in, double tol_out, double tol_in, Rcpp::Nullable<double> t_init_r, double bt_factor, int bt_max, bool use_screen, bool verbose, Rcpp::Nullable<arma::vec> beta_init_r, Rcpp::Nullable<arma::mat> Theta_init_r, std::string family);
-RcppExport SEXP _SGPL_sgpl_fit_cpp(SEXP XSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP lambdaSEXP, SEXP alphaSEXP, SEXP groups_x_rSEXP, SEXP groups_z_rSEXP, SEXP max_iter_outSEXP, SEXP max_iter_inSEXP, SEXP tol_outSEXP, SEXP tol_inSEXP, SEXP t_init_rSEXP, SEXP bt_factorSEXP, SEXP bt_maxSEXP, SEXP use_screenSEXP, SEXP verboseSEXP, SEXP beta_init_rSEXP, SEXP Theta_init_rSEXP, SEXP familySEXP) {
+Rcpp::List sgpl_fit_cpp(const arma::mat& X, const arma::mat& Z, const arma::vec& y, double lambda, double alpha, Rcpp::Nullable<arma::uvec> groups_x_r, Rcpp::Nullable<arma::uvec> groups_z_r, int max_iter_out, int max_iter_in, double tol_out, double tol_in, Rcpp::Nullable<double> t_init_r, double bt_factor, int bt_max, bool use_screen, bool verbose, Rcpp::Nullable<arma::vec> beta_init_r, Rcpp::Nullable<arma::mat> Theta_init_r, Rcpp::Nullable<double> beta0_init_r, Rcpp::Nullable<arma::vec> theta0_init_r, std::string family);
+RcppExport SEXP _SGPL_sgpl_fit_cpp(SEXP XSEXP, SEXP ZSEXP, SEXP ySEXP, SEXP lambdaSEXP, SEXP alphaSEXP, SEXP groups_x_rSEXP, SEXP groups_z_rSEXP, SEXP max_iter_outSEXP, SEXP max_iter_inSEXP, SEXP tol_outSEXP, SEXP tol_inSEXP, SEXP t_init_rSEXP, SEXP bt_factorSEXP, SEXP bt_maxSEXP, SEXP use_screenSEXP, SEXP verboseSEXP, SEXP beta_init_rSEXP, SEXP Theta_init_rSEXP, SEXP beta0_init_rSEXP, SEXP theta0_init_rSEXP, SEXP familySEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -55,15 +57,17 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<arma::vec> >::type beta_init_r(beta_init_rSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<arma::mat> >::type Theta_init_r(Theta_init_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<double> >::type beta0_init_r(beta0_init_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<arma::vec> >::type theta0_init_r(theta0_init_rSEXP);
     Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
-    rcpp_result_gen = Rcpp::wrap(sgpl_fit_cpp(X, Z, y, lambda, alpha, groups_x_r, groups_z_r, max_iter_out, max_iter_in, tol_out, tol_in, t_init_r, bt_factor, bt_max, use_screen, verbose, beta_init_r, Theta_init_r, family));
+    rcpp_result_gen = Rcpp::wrap(sgpl_fit_cpp(X, Z, y, lambda, alpha, groups_x_r, groups_z_r, max_iter_out, max_iter_in, tol_out, tol_in, t_init_r, bt_factor, bt_max, use_screen, verbose, beta_init_r, Theta_init_r, beta0_init_r, theta0_init_r, family));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_SGPL_objective_sgpl_cpp", (DL_FUNC) &_SGPL_objective_sgpl_cpp, 10},
-    {"_SGPL_sgpl_fit_cpp", (DL_FUNC) &_SGPL_sgpl_fit_cpp, 19},
+    {"_SGPL_objective_sgpl_cpp", (DL_FUNC) &_SGPL_objective_sgpl_cpp, 12},
+    {"_SGPL_sgpl_fit_cpp", (DL_FUNC) &_SGPL_sgpl_fit_cpp, 21},
     {NULL, NULL, 0}
 };
 

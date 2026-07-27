@@ -25,6 +25,8 @@
 #' @param bt_max Maximum backtracking iterations.
 #' @param use_screen Logical; use KKT screening rules.
 #' @param verbose Logical; print optimisation progress.
+#' @param beta0_init Numeric scalar. Optional warm-start main intercept.
+#' @param theta0_init Numeric vector of length \eqn{K}. Optional warm-start modifier intercept vector.
 #' @param beta_init Numeric vector. Optional warm-start main effects.
 #' @param Theta_init Numeric matrix. Optional warm-start interaction effects.
 #' @return A list containing estimated coefficients and optimization
@@ -32,13 +34,14 @@
 #'
 #' @export
 SGPL_fit = function(X, Z, y,
-                    family = c("gaussian", "binomial"),
+                    family = c("gaussian", "binomial", "cox"),
                     lambda = 0.1, alpha = 0.5,
                     groups_x = NULL, groups_z = NULL,
                     max_iter_out = 200, max_iter_in = 50,
                     tol_out = 1e-6, tol_in = 1e-6,
                     t_init = NULL, bt_factor = 0.5, bt_max = 50,
                     use_screen = TRUE, verbose = TRUE,
+                    beta0_init = NULL, theta0_init = NULL,
                     beta_init = NULL, Theta_init = NULL) {
 
   # family validation
@@ -97,6 +100,8 @@ SGPL_fit = function(X, Z, y,
     verbose = verbose,
     beta_init_r = beta_init,
     Theta_init_r = Theta_init,
+    beta0_init_r = beta0_init,
+    theta0_init_r = theta0_init,
     family = family
   )
 
@@ -114,22 +119,26 @@ SGPL_fit = function(X, Z, y,
 #' @param Z Modifying matrix.
 #' @param beta Main effect coefficients.
 #' @param Theta Interaction coefficient matrix.
-#'
+#' @param beta0 Numeric scalar; overall intercept. Default is 0.
+#' @param theta0 Numeric vector of length \eqn{K}; modifier intercept vector. Default is 0s.
 #' @return Numeric prediction vector.
 #'
 #' @export
-SGPL_predict = function(X, Z, beta, Theta) {
+SGPL_predict = function(X, Z, beta, Theta, beta0 = 0, theta0 = NULL) {
 
   n = nrow(X)
   p = ncol(X)
   out = numeric(n)
 
-  for (j in seq_len(p)) {
-    eta = beta[j] + Z %*% Theta[, j]
-    out = out + X[, j] * eta
+
+  K = ncol(Z)
+  if (is.null(theta0)) {
+    theta0 = numeric(K)
   }
 
-  as.numeric(out)
+  eta = as.numeric(beta0 + Z %*% theta0 + rowSums(X * (rep(1, n) %*% t(beta) + Z %*% Theta)))
+
+  as.numeric(eta)
 }
 
 #' Compute Maximum Lambda for SGPL
@@ -277,6 +286,8 @@ SGPL_CV = function(X, Z, y,
     tr = which(fids != f)
     te = which(fids == f)
 
+    warm_beta0 = NULL
+    warm_theta0 = NULL
     warm_beta = NULL
     warm_Theta = NULL
 
@@ -296,11 +307,14 @@ SGPL_CV = function(X, Z, y,
         tol_in = tol_in,
         beta_init = warm_beta,
         Theta_init = warm_Theta,
+        beta0_init = warm_beta0,
+        theta0_init = warm_theta0,
         verbose = FALSE
       )
 
       # Get the raw linear predictor eta
-      eta = SGPL_predict(X[te, , drop = FALSE], Z[te, , drop = FALSE], fit$beta, fit$Theta)
+      eta = SGPL_predict(X[te, , drop = FALSE], Z[te, , drop = FALSE], fit$beta, fit$Theta,
+                         beta0 = fit$beta0, theta0 = fit$theta0)
 
       if (family == "gaussian") {
         # MSE
@@ -317,6 +331,8 @@ SGPL_CV = function(X, Z, y,
         cv_err[f, li] = 2 * mean(logloss)
       }
 
+      warm_beta0 = fit$beta0
+      warm_theta0 = fit$theta0
       warm_beta = fit$beta
       warm_Theta = fit$Theta
     }
