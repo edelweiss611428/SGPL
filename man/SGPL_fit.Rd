@@ -8,7 +8,7 @@ SGPL_fit(
   X,
   Z,
   y,
-  family = c("gaussian", "binomial", "cox"),
+  family = c("gaussian", "binomial"),
   lambda = 0.1,
   alpha = 0.5,
   groups_x = NULL,

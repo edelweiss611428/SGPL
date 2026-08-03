@@ -180,6 +180,7 @@ Rcpp::List sgpl_fit_cpp(
   // outer-loop (block coordinate descent)
 
   for (int iter_out = 0; iter_out < max_iter_out; iter_out++) {
+
     arma::vec beta_old = beta;
     arma::mat Theta_old = Theta;
     double beta0_old = beta0;
