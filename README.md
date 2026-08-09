@@ -4,7 +4,7 @@
 
 ---
 
-## 💡 What is this method about?
+## What is this method about?
 
 Modern data often display **effect modification**, where the effect of a main predictor $X$ on a response $Y$ depends on background characteristics or environmental modifiers $Z$. 
 
@@ -13,6 +13,7 @@ While existing methods like the **Pliable Lasso (PL)** capture varying coefficie
 2. **Missing predictor-level hierarchy within groups:** Active interaction groups in GPL do not guarantee that individual predictors within that group are non-zero when an interaction exists.
 
 ### The SGPL Solution
+
 The **Sparse-Group Pliable Lasso (SGPL)** introduces a unified, two-level hierarchical regularisation mechanism that simultaneously promotes:
 - **Group-level selection:** Evaluates entire groups of main predictors $X$ and modifiers $Z$.
 - **Within-group predictor sparsity:** Selects individual predictors within active groups via an element-wise $\ell_1$ penalty on main effects $\boldsymbol{\beta}$.
@@ -27,6 +28,7 @@ The **Sparse-Group Pliable Lasso (SGPL)** introduces a unified, two-level hierar
 - **Logistic Regression** (Binary response, log-loss)
 - **Cox Proportional Hazards Model** (Survival analysis, negative partial log-likelihood) - To-be-implemented
 
+---
 ## 📦 Installation
 
 You can install the development version of `SGPL` directly from GitHub:
