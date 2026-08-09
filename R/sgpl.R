@@ -271,7 +271,8 @@ compute_lambda_max = function(X, Z, y,
 #' @param max_iter_in Maximum inner iterations.
 #' @param tol_out Outer convergence tolerance.
 #' @param tol_in Inner convergence tolerance.
-#'
+#' @param cached Logical; whether or not to use cached exact version (O(L) faster). Default: TRUE
+#' @param warmup Logical; whether or not to use warm-up. Default: TRUE
 #' @return Cross-validation results and selected lambdas.
 #'
 #' @export
@@ -280,7 +281,7 @@ SGPL_CV = function(X, Z, y,
                    lambda_seq = NULL, alpha = 0.5,
                    groups_x = NULL, groups_z = NULL,
                    nfolds = 5, max_iter_out = 200, max_iter_in = 50,
-                   tol_out = 1e-5, tol_in = 1e-5) {
+                   tol_out = 1e-5, tol_in = 1e-5, cached = TRUE, warmup = TRUE) {
 
   family = match.arg(family)
   n = nrow(X)
@@ -337,7 +338,7 @@ SGPL_CV = function(X, Z, y,
         Theta_init = warm_Theta,
         beta0_init = warm_beta0,
         theta0_init = warm_theta0,
-        verbose = FALSE
+        verbose = FALSE, cached = cached
       )
 
       # Get the raw linear predictor eta
@@ -359,10 +360,17 @@ SGPL_CV = function(X, Z, y,
         cv_err[f, li] = 2 * mean(logloss)
       }
 
-      warm_beta0 = fit$beta0
-      warm_theta0 = fit$theta0
-      warm_beta = fit$beta
-      warm_Theta = fit$Theta
+      if(warmup){
+        warm_beta0 = fit$beta0
+        warm_theta0 = fit$theta0
+        warm_beta = fit$beta
+        warm_Theta = fit$Theta
+      } else{
+        warm_beta0 = NULL
+        warm_theta0 = NULL
+        warm_beta = NULL
+        warm_Theta = NULL
+      }
     }
   }
 
