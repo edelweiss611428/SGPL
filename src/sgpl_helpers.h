@@ -89,13 +89,11 @@ inline arma::vec predict_sgpl_cpp(
 
 // Loss functions
 
-// gaussian loss
-inline double compute_gaussian_loss(const arma::vec& y, const arma::vec& pred) {
-  arma::vec resid = y - pred;
-  return arma::dot(resid, resid) / (2.0 * y.n_elem);
+inline double compute_gaussian_loss(const arma::vec& y, const arma::vec& eta) {
+  arma::vec r = y - eta;
+  return 0.5 * arma::dot(r, r) / y.n_elem;
 }
 
-// logistic loss (eta is prediction in linear)
 inline double compute_logistic_loss(const arma::vec& y, const arma::vec& eta) {
   double logloss = 0.0;
   int n = y.n_elem;
@@ -108,6 +106,7 @@ inline double compute_logistic_loss(const arma::vec& y, const arma::vec& eta) {
   }
   return logloss / n;
 }
+
 
 // Compute sgpl penalties
 // per_pred + joint_grp + z_grp + l1_b + l1_t
@@ -279,8 +278,7 @@ inline void update_intercepts_gaussian(
   arma::mat M = Z * Theta;
   M.each_row() += beta.t();
   arma::vec fitted_pen = arma::sum(X % M, 1);
-  arma::vec r0 = y - fitted_pen; //manual computation of fitted values without intercept contribution
-  // could call predict_sgpl_cpp as well but a bit slower
+  arma::vec r0 = y - fitted_pen;
   // int K = Z.n_cols;
   // arma::vec fitted_pen = predict_sgpl_cpp(X<Z,beta, Theta, 0.0, arma::vec theta0(K, arma::fill::zeros));
 
