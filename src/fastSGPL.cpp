@@ -258,13 +258,13 @@ Rcpp::List fast_sgpl_fit_cpp6(
       arma::vec eta_l_old = compute_block_eta_fast(X_l, beta_l_tilde, ZTheta_l);
       arma::vec eta_neg_l = eta - eta_l_old;
       arma::vec r_neg_l = y - eta_neg_l;
-
+      arma::vec eta_l_current = eta;
 
       // Void function - can modify objects
       screen_kkt_gaussian(
         l, use_screen, family, X_l, r_neg_l, Z, n, p_l, lam1, lam2,
         idx_l, beta_l_tilde, Theta_l_tilde, beta, Theta, beta2,
-        col_sums_Theta2, ZTheta, eta, eta_neg_l, joint_grp_vec,
+        col_sums_Theta2, ZTheta, eta_l_current, eta_neg_l, joint_grp_vec,
         mod_grp_vec, total_per_pred, total_joint_grp, total_mod_grp,
         total_l1_b, total_l1_t, total_penalty
       );
@@ -276,7 +276,7 @@ Rcpp::List fast_sgpl_fit_cpp6(
 
         arma::vec beta_l_old_in = beta_l_tilde;
         arma::mat Theta_l_old_in = Theta_l_tilde;
-        arma::vec eta_l_current = eta_neg_l + compute_block_eta_fast(X_l, beta_l_tilde, ZTheta_l);
+        // arma::vec eta_l_current = eta_neg_l + compute_block_eta_fast(X_l, beta_l_tilde, ZTheta_l);
 
         arma::vec gb = gradient_smooth_loss_beta(X_l, y, eta_l_current, n, family);
         arma::mat gT = gradient_smooth_loss_theta(X_l, Z, y, eta_l_current, p_l, K, n, family);
@@ -377,6 +377,7 @@ Rcpp::List fast_sgpl_fit_cpp6(
             // Commit candidate ZTheta slice to global cache
             ZTheta_l = ZTheta_l_cand;
             ZTheta.cols(idx_l) = ZTheta_l_cand;
+            eta_l_current = eta_cand;
             break;
           }
           t_l *= bt_factor;
