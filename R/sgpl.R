@@ -29,6 +29,7 @@
 #' @param theta0_init Numeric vector of length \eqn{K}. Optional warm-start modifier intercept vector.
 #' @param beta_init Numeric vector. Optional warm-start main effects.
 #' @param Theta_init Numeric matrix. Optional warm-start interaction effects.
+#' @param cached Logical; whether or not to use cached exact version (O(L) faster). Default: TRUE
 #' @return A list containing estimated coefficients and optimization
 #' diagnostics.
 #'
@@ -42,7 +43,7 @@ SGPL_fit = function(X, Z, y,
                     t_init = NULL, bt_factor = 0.5, bt_max = 50,
                     use_screen = TRUE, verbose = TRUE,
                     beta0_init = NULL, theta0_init = NULL,
-                    beta_init = NULL, Theta_init = NULL) {
+                    beta_init = NULL, Theta_init = NULL, cached = TRUE) {
 
   # family validation
   family = match.arg(family)
@@ -84,26 +85,50 @@ SGPL_fit = function(X, Z, y,
   groups_x = as.integer(groups_x)
   groups_z = as.integer(groups_z)
 
-  # route to the appropriate rcpp solver
-  fit = sgpl_fit_cpp(
-    X = X, Z = Z, y = as.numeric(y),
-    lambda = lambda, alpha = alpha,
-    groups_x_r = groups_x, groups_z_r = groups_z,
-    max_iter_out = max_iter_out,
-    max_iter_in = max_iter_in,
-    tol_out = tol_out,
-    tol_in = tol_in,
-    t_init_r = t_init,
-    bt_factor = bt_factor,
-    bt_max = bt_max,
-    use_screen = use_screen,
-    verbose = verbose,
-    beta_init_r = beta_init,
-    Theta_init_r = Theta_init,
-    beta0_init_r = beta0_init,
-    theta0_init_r = theta0_init,
-    family = family
-  )
+  if(!cached){
+    # route to the appropriate rcpp solver
+    fit = sgpl_fit_cpp(
+      X = X, Z = Z, y = as.numeric(y),
+      lambda = lambda, alpha = alpha,
+      groups_x_r = groups_x, groups_z_r = groups_z,
+      max_iter_out = max_iter_out,
+      max_iter_in = max_iter_in,
+      tol_out = tol_out,
+      tol_in = tol_in,
+      t_init_r = t_init,
+      bt_factor = bt_factor,
+      bt_max = bt_max,
+      use_screen = use_screen,
+      verbose = verbose,
+      beta_init_r = beta_init,
+      Theta_init_r = Theta_init,
+      beta0_init_r = beta0_init,
+      theta0_init_r = theta0_init,
+      family = family
+    )
+  } else{
+    # route to the appropriate rcpp solver
+    fit = fast_sgpl_fit_cpp6(
+      X = X, Z = Z, y = as.numeric(y),
+      lambda = lambda, alpha = alpha,
+      groups_x_r = groups_x, groups_z_r = groups_z,
+      max_iter_out = max_iter_out,
+      max_iter_in = max_iter_in,
+      tol_out = tol_out,
+      tol_in = tol_in,
+      t_init_r = t_init,
+      bt_factor = bt_factor,
+      bt_max = bt_max,
+      use_screen = use_screen,
+      verbose = verbose,
+      beta_init_r = beta_init,
+      Theta_init_r = Theta_init,
+      beta0_init_r = beta0_init,
+      theta0_init_r = theta0_init,
+      family = family
+    )
+
+  }
 
   # preserve the structural family metadata in the returned object
   fit$family = family
@@ -246,7 +271,8 @@ compute_lambda_max = function(X, Z, y,
 #' @param max_iter_in Maximum inner iterations.
 #' @param tol_out Outer convergence tolerance.
 #' @param tol_in Inner convergence tolerance.
-#'
+#' @param cached Logical; whether or not to use cached exact version (O(L) faster). Default: TRUE
+#' @param warmup Logical; whether or not to use warm-up. Default: TRUE
 #' @return Cross-validation results and selected lambdas.
 #'
 #' @export
@@ -255,7 +281,7 @@ SGPL_CV = function(X, Z, y,
                    lambda_seq = NULL, alpha = 0.5,
                    groups_x = NULL, groups_z = NULL,
                    nfolds = 5, max_iter_out = 200, max_iter_in = 50,
-                   tol_out = 1e-5, tol_in = 1e-5) {
+                   tol_out = 1e-5, tol_in = 1e-5, cached = TRUE, warmup = TRUE) {
 
   family = match.arg(family)
   n = nrow(X)
@@ -264,6 +290,9 @@ SGPL_CV = function(X, Z, y,
     lam_max = compute_lambda_max(X, Z, y, groups_x, groups_z, alpha)
     lambda_seq = exp(seq(log(lam_max), log(lam_max * 0.005), length.out = 30))
   }
+
+  # Need to check data for lambda_seq
+  # Also need to check validity of group_x and group_z (future work)
 
   nL = length(lambda_seq)
 
@@ -309,7 +338,7 @@ SGPL_CV = function(X, Z, y,
         Theta_init = warm_Theta,
         beta0_init = warm_beta0,
         theta0_init = warm_theta0,
-        verbose = FALSE
+        verbose = FALSE, cached = cached
       )
 
       # Get the raw linear predictor eta
@@ -331,10 +360,17 @@ SGPL_CV = function(X, Z, y,
         cv_err[f, li] = 2 * mean(logloss)
       }
 
-      warm_beta0 = fit$beta0
-      warm_theta0 = fit$theta0
-      warm_beta = fit$beta
-      warm_Theta = fit$Theta
+      if(warmup){
+        warm_beta0 = fit$beta0
+        warm_theta0 = fit$theta0
+        warm_beta = fit$beta
+        warm_Theta = fit$Theta
+      } else{
+        warm_beta0 = NULL
+        warm_theta0 = NULL
+        warm_beta = NULL
+        warm_Theta = NULL
+      }
     }
   }
 

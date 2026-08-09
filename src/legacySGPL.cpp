@@ -169,7 +169,7 @@ Rcpp::List sgpl_fit_cpp(
     pg(groups_z(i) - 1) += 1.0;
   }
 
-  double lam1 = lambda * (1.0 - alpha); // redundant - to be removed later
+  double lam1 = lambda * (1.0 - alpha);
   double lam2 = lambda * alpha;
   double t_init = compute_t_init(X,Z,t_init_r,family); //update this for cox
 
@@ -180,6 +180,7 @@ Rcpp::List sgpl_fit_cpp(
   // outer-loop (block coordinate descent)
 
   for (int iter_out = 0; iter_out < max_iter_out; iter_out++) {
+
     arma::vec beta_old = beta;
     arma::mat Theta_old = Theta;
     double beta0_old = beta0;
@@ -499,7 +500,6 @@ Rcpp::List sgpl_fit_cpp(
 
         double delta_in = 0.0;
 
-        // abs
 
         for (int jj = 0; jj < p_l;jj++) {
 

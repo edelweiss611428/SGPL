@@ -17,7 +17,9 @@ SGPL_CV(
   max_iter_out = 200,
   max_iter_in = 50,
   tol_out = 1e-05,
-  tol_in = 1e-05
+  tol_in = 1e-05,
+  cached = TRUE,
+  warmup = TRUE
 )
 }
 \arguments{
@@ -46,6 +48,10 @@ SGPL_CV(
 \item{tol_out}{Outer convergence tolerance.}
 
 \item{tol_in}{Inner convergence tolerance.}
+
+\item{cached}{Logical; whether or not to use cached exact version (O(L) faster). Default: TRUE}
+
+\item{warmup}{Logical; whether or not to use warm-up. Default: TRUE}
 }
 \value{
 Cross-validation results and selected lambdas.

@@ -8,7 +8,7 @@ SGPL_fit(
   X,
   Z,
   y,
-  family = c("gaussian", "binomial", "cox"),
+  family = c("gaussian", "binomial"),
   lambda = 0.1,
   alpha = 0.5,
   groups_x = NULL,
@@ -25,7 +25,8 @@ SGPL_fit(
   beta0_init = NULL,
   theta0_init = NULL,
   beta_init = NULL,
-  Theta_init = NULL
+  Theta_init = NULL,
+  cached = TRUE
 )
 }
 \arguments{
@@ -74,6 +75,8 @@ Default assigns each modifier to its own group.}
 \item{beta_init}{Numeric vector. Optional warm-start main effects.}
 
 \item{Theta_init}{Numeric matrix. Optional warm-start interaction effects.}
+
+\item{cached}{Logical; whether or not to use cached exact version (O(L) faster). Default: TRUE}
 }
 \value{
 A list containing estimated coefficients and optimization
