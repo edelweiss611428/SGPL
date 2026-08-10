@@ -43,7 +43,7 @@ inline arma::vec compute_block_eta_fast(
 // KKT screening (for Gaussian only)
 
 
-inline void screen_kkt_gaussian(
+inline bool screen_kkt_gaussian(
     std::size_t l, bool use_screen, const std::string& family,
     const arma::mat& X_l, const arma::vec& r_neg_l, const arma::mat& Z,
     double n, std::size_t p_l,
@@ -56,7 +56,7 @@ inline void screen_kkt_gaussian(
     double& total_l1_b, double& total_l1_t, double& total_penalty
 ) {
   if (!use_screen || family != "gaussian") {
-    return;
+    return false;
   }
 
   arma::vec g_l = (X_l.t() * r_neg_l) / n;
@@ -91,7 +91,9 @@ inline void screen_kkt_gaussian(
     ZTheta.cols(idx_l).zeros();
 
     eta = eta_neg_l;
+    return true;
   }
+  return false;
 }
 
 // Optimisation algorithm
@@ -260,14 +262,18 @@ Rcpp::List fast_sgpl_fit_cpp6(
       arma::vec r_neg_l = y - eta_neg_l;
       arma::vec eta_l_current = eta;
 
-      // Void function - can modify objects; however, should not require modify caching variables
-      screen_kkt_gaussian(
+      // can modify objects if kkt conditions are met
+      bool skipped = screen_kkt_gaussian(
         l, use_screen, family, X_l, r_neg_l, Z, n, p_l, lam1, lam2,
         idx_l, beta_l_tilde, Theta_l_tilde, beta, Theta, beta2,
         col_sums_Theta2, ZTheta, eta_l_current, eta_neg_l, joint_grp_vec,
         mod_grp_vec, total_per_pred, total_joint_grp, total_mod_grp,
         total_l1_b, total_l1_t, total_penalty
       );
+
+      if(skipped){
+        continue;
+      }
 
       double t_l = t_init;
 
