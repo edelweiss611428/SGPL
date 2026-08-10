@@ -310,7 +310,7 @@ Rcpp::List sgpl_fit_cpp(
             }
           }
 
-          continue;
+          continue; //skip inner loop
         }
       }
 
