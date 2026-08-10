@@ -260,7 +260,7 @@ Rcpp::List fast_sgpl_fit_cpp6(
       arma::vec r_neg_l = y - eta_neg_l;
       arma::vec eta_l_current = eta;
 
-      // Void function - can modify objects
+      // Void function - can modify objects; however, should not require modify caching variables
       screen_kkt_gaussian(
         l, use_screen, family, X_l, r_neg_l, Z, n, p_l, lam1, lam2,
         idx_l, beta_l_tilde, Theta_l_tilde, beta, Theta, beta2,
