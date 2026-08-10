@@ -154,18 +154,18 @@ Rcpp::List sgpl_fit_cpp(
 
   // helpers
 
-  unsigned int L = groups_x.max();
-  unsigned int G = groups_z.max();
+  int L = groups_x.max();
+  int G = groups_z.max();
   arma::vec pl(L);
   arma::vec pg(G);
   pl.zeros();
   pg.zeros();
 
-  for (unsigned int i = 0; i < groups_x.n_elem; i++) {
+  for (int i = 0; i < groups_x.n_elem; i++) {
     pl(groups_x(i) - 1) += 1.0;
   }
 
-  for (unsigned int i = 0; i < groups_z.n_elem; i++) {
+  for (int i = 0; i < groups_z.n_elem; i++) {
     pg(groups_z(i) - 1) += 1.0;
   }
 
@@ -206,7 +206,7 @@ Rcpp::List sgpl_fit_cpp(
 
     for (int l = 1; l <= L; l++) {
       // group indices
-      std::vector<unsigned int> idx_l_vec;
+      std::vector<int> idx_l_vec;
 
       // future versions consider pre-computing group indexes
       for (int j = 0; j < p; j++) {
@@ -282,7 +282,7 @@ Rcpp::List sgpl_fit_cpp(
           vv(i) = g_l(i);
         }
 
-        unsigned int ctr = g_l.n_elem;
+        int ctr = g_l.n_elem;
 
         for (int j = 0; j < H_l.n_cols;j++) {
           for (int k = 0;k < H_l.n_rows;k++) {
@@ -390,12 +390,12 @@ Rcpp::List sgpl_fit_cpp(
 
           double w_denom = std::sqrt(1.0 + K);
 
-          for (unsigned int g = 1; g <= G; g++) {
+          for (int g = 0; g < G; g++) {
 
-            std::vector<unsigned int> idxg;
+            std::vector<int> idxg;
 
             for (int k = 0; k < K; k++) {
-              if (groups_z(k) == g) {
+              if (groups_z(k) == g + 1) {
                 idxg.push_back(k);
               }
             }
@@ -406,20 +406,21 @@ Rcpp::List sgpl_fit_cpp(
 
             for (int jj = 0; jj < p_l; jj++) {
               for (int kk = 0; kk < ng; kk++) {
-                vv(ctr) = Theta_try( idxg[kk], jj);
+                vv(ctr) = Theta_try(idxg[kk], jj);
                 ctr++;
               }
             }
 
-            double w = std::sqrt(pg(g - 1)) / w_denom;
+            double w = std::sqrt(pg(g)) / w_denom;
+
             vv = block_soft(vv, t_l * lam1 * w);
+
             ctr = 0;
 
-            for (int jj = 0;jj < p_l;jj++) {
+            for (int jj = 0; jj < p_l; jj++) {
               for (int kk = 0; kk < ng; kk++) {
-                Theta_try( idxg[kk], jj) = vv(ctr);
+                Theta_try(idxg[kk], jj) = vv(ctr);
                 ctr++;
-
               }
             }
           }

@@ -7,7 +7,7 @@
 // Soft threshold for vectors and matrices
 inline arma::vec soft_thresh_vec(const arma::vec& x, double t) {
   arma::vec out(x.n_elem);
-  for (unsigned int i = 0; i < x.n_elem; i++) {
+  for (int i = 0; i < x.n_elem; i++) {
     double xi = x(i);
     if (xi > t) {
       out(i) = xi - t;
@@ -22,8 +22,8 @@ inline arma::vec soft_thresh_vec(const arma::vec& x, double t) {
 
 inline arma::mat soft_thresh_mat(const arma::mat& x, double t) {
   arma::mat out(x.n_rows, x.n_cols);
-  for (unsigned int i = 0; i < x.n_rows; i++) {
-    for (unsigned int j = 0; j < x.n_cols; j++) {
+  for (int i = 0; i < x.n_rows; i++) {
+    for (int j = 0; j < x.n_cols; j++) {
       double xi = x(i, j);
       if (xi > t) {
         out(i, j) = xi - t;
@@ -40,7 +40,7 @@ inline arma::mat soft_thresh_mat(const arma::mat& x, double t) {
 // block_soft
 inline arma::vec block_soft(const arma::vec& v, double t) {
   double nv = 0.0;
-  for (unsigned int i = 0; i < v.n_elem; i++) {
+  for (int i = 0; i < v.n_elem; i++) {
     nv += v(i) * v(i);
   }
   nv = std::sqrt(nv);
@@ -52,7 +52,7 @@ inline arma::vec block_soft(const arma::vec& v, double t) {
   }
 
   double mult = 1.0 - t / nv;
-  for (unsigned int i = 0; i < v.n_elem; i++) {
+  for (int i = 0; i < v.n_elem; i++) {
     out(i) = v(i) * mult;
   }
   return out;

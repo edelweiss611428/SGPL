@@ -10,13 +10,13 @@ using namespace arma;
 
 inline double compute_block_modifier_penalty(
     const arma::mat& Theta_l,
-    unsigned int G,
+    int G,
     const arma::vec& pg,
     const std::vector<arma::uvec>& group_z_indices,
     double w_denom
 ) {
   double z_grp_l = 0.0;
-  for (unsigned int g = 0; g < G; ++g) {
+  for (int g = 0; g < G; ++g) {
     const arma::uvec& idx_g = group_z_indices[g];
     if (idx_g.n_elem == 0) continue;
 
@@ -130,21 +130,21 @@ Rcpp::List fast_sgpl_fit_cpp6(
   if ((int)groups_x.n_elem != p) Rcpp::stop("groups_x has incorrect length");
   if ((int)groups_z.n_elem != K) Rcpp::stop("groups_z has incorrect length");
 
-  unsigned int L = groups_x.max();
-  unsigned int G = groups_z.max();
+  int L = groups_x.max();
+  int G = groups_z.max();
   double w_denom = std::sqrt(1.0 + K);
 
   arma::vec pl(L, arma::fill::zeros);
   arma::vec pg(G, arma::fill::zeros);
 
   std::vector<arma::uvec> group_x_indices(L);
-  for (unsigned int l = 1; l <= L; ++l) {
+  for (int l = 1; l <= L; ++l) {
     group_x_indices[l - 1] = arma::find(groups_x == l);
     pl(l - 1) = group_x_indices[l - 1].n_elem;
   }
 
   std::vector<arma::uvec> group_z_indices(G);
-  for (unsigned int g = 1; g <= G; ++g) {
+  for (int g = 1; g <= G; ++g) {
     group_z_indices[g - 1] = arma::find(groups_z == g);
     pg(g - 1) = group_z_indices[g - 1].n_elem;
   }
@@ -192,7 +192,7 @@ Rcpp::List fast_sgpl_fit_cpp6(
   double total_per_pred = lam1 * arma::accu(arma::sqrt(beta2 + col_sums_Theta2));
 
   arma::vec joint_grp_vec(L, arma::fill::zeros);
-  for (unsigned int l = 0; l < L; ++l) {
+  for (int l = 0; l < L; ++l) {
     const arma::uvec& idx = group_x_indices[l];
     if (idx.n_elem > 0) {
       double svec = arma::accu(beta2.elem(idx)) + arma::accu(col_sums_Theta2.elem(idx));
@@ -202,7 +202,7 @@ Rcpp::List fast_sgpl_fit_cpp6(
   double total_joint_grp = arma::accu(joint_grp_vec);
 
   arma::vec mod_grp_vec(L, arma::fill::zeros);
-  for (unsigned int l = 0; l < L; ++l) {
+  for (int l = 0; l < L; ++l) {
     const arma::uvec& idx_l = group_x_indices[l];
     if (idx_l.n_elem == 0) continue;
     mod_grp_vec(l) = lam1 * compute_block_modifier_penalty(Theta.cols(idx_l), G, pg, group_z_indices, w_denom);
@@ -239,13 +239,13 @@ Rcpp::List fast_sgpl_fit_cpp6(
         arma::mat M = Z * Theta;
         M.each_row() += beta.t();
         arma::vec eta_pen = arma::sum(X % M, 1);
-        update_intercepts_logit(Z, y, eta_pen, beta0, theta0);
+        update_intercepts_logit(Z, y, eta_pen, beta0, theta0); //future version allow users to input tolerance for irls solver
       }
       eta += (beta0 + Z * theta0);
     }
 
     // Loop over predictor groups
-    for (unsigned int l = 0; l < L; ++l) {
+    for (int l = 0; l < L; ++l) {
 
 
       const arma::uvec& idx_l = group_x_indices[l];
@@ -319,7 +319,7 @@ Rcpp::List fast_sgpl_fit_cpp6(
           }
 
           // Modifier group shrinkage
-          for (unsigned int g = 0; g < G; ++g) {
+          for (int g = 0; g < G; ++g) {
             const arma::uvec& idxg = group_z_indices[g];
             int ng = idxg.n_elem;
             if (ng == 0) continue;
