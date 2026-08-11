@@ -177,81 +177,117 @@ SGPL_predict = function(X, Z, beta, Theta, beta0 = 0, theta0 = NULL) {
 #' @param groups_x Predictor groups.
 #' @param groups_z Modifier groups.
 #' @param alpha Mixing parameter.
-#'
+#' @param family Family
 #' @return Numeric lambda maximum.
-#' @importFrom  stats sd uniroot
 #' @export
-compute_lambda_max = function(X, Z, y,
-                              groups_x = NULL, groups_z = NULL,
-                              alpha = 0.5) {
-  if (!is.matrix(X))
-    stop("X must be a matrix.")
+#'
 
-  if (!is.matrix(Z))
-    stop("Z must be a matrix.")
+compute_lambda_max <- function(X, Z, y, groups_x, groups_z, alpha = 0.5,
+                             family = c("gaussian", "binomial")) {
+  family <- match.arg(family)
+  n <- nrow(X)
+  p <- ncol(X)
+  K <- ncol(Z)
 
-  if (!is.numeric(y))
-    stop("y must be numeric.")
+  if (family == "gaussian") {
+    fit0 <- lm.fit(x = cbind(1, Z), y = y)
+    eta0 <- as.numeric(cbind(1, Z) %*% fit0$coefficients)
+    r <- y - eta0
 
-  n = nrow(X)
-  p = ncol(X)
-  K = ncol(Z)
+    vals <- vapply(seq_len(p), function(j) {
+      sqrt((sum(X[, j] * r) / n)^2 + sum((crossprod(Z, X[, j] * r) / n)^2))
+    }, numeric(1))
+  } else if (family == "binomial") {
+    fit0 <- glm.fit(x = cbind(1, Z), y = y, family = binomial())
+    eta0 <- as.numeric(cbind(1, Z) %*% fit0$coefficients)
+    mu0 <- 1 / (1 + exp(-eta0))
+    res <- mu0 - y
 
-  if (length(y) != n)
-    stop("length(y) must equal nrow(X).")
-
-  if (nrow(Z) != n)
-    stop("nrow(Z) must equal nrow(X).")
-
-  if (is.null(groups_x))
-    groups_x = seq_len(p)
-
-  if (is.null(groups_z))
-    groups_z = seq_len(K)
-
-  groups_x = as.integer(groups_x)
-  groups_z = as.integer(groups_z)
-
-  L = max(groups_x)
-
-  pl = tabulate(groups_x)
-
-  lam_candidates = numeric(L)
-
-  for (l in seq_len(L)) {
-
-    idx_l = which(groups_x == l)
-    p_l = pl[l]
-    X_l = X[, idx_l, drop = FALSE]
-    g_l = as.numeric(crossprod(X_l, y)) / n
-    H_l = crossprod(Z, X_l * matrix(y, n, length(idx_l))) / n
-    v = c(g_l, as.vector(H_l))
-
-    kkt_fun = function(lambda) {
-
-      lam1 = lambda * (1 - alpha)
-      lam2 = lambda * alpha
-
-      sv = sign(v) *pmax(abs(v) - lam2, 0)
-
-      sqrt(sum(sv^2)) - sqrt(p_l) * lam1
-    }
-
-    upper =
-      max(abs(v)) /
-      max(alpha, 1e-8)
-
-    while (kkt_fun(upper) > 0)
-      upper = upper * 2
-
-    lam_candidates[l] = uniroot(kkt_fun,
-                                lower = 0,
-                                upper = upper,
-                                tol = 1e-10)$root
+    vals <- vapply(seq_len(p), function(j) {
+      sqrt((sum(X[, j] * res) / n)^2 +
+             sum((crossprod(Z, X[, j] * res) / n)^2))
+    }, numeric(1))
   }
 
-  max(lam_candidates)
+  if (alpha < 1) {
+    max(vals, na.rm = TRUE) / max(1 - alpha, 1e-8)
+  } else {
+    # Pure l1 case; use maximum absolute initial gradient over all augmented columns.
+    max(vals, na.rm = TRUE) / max(alpha, 1e-8)
+  }
 }
+
+# compute_lambda_max = function(X, Z, y,
+#                               groups_x = NULL, groups_z = NULL,
+#                               alpha = 0.5) {
+#   if (!is.matrix(X))
+#     stop("X must be a matrix.")
+#
+#   if (!is.matrix(Z))
+#     stop("Z must be a matrix.")
+#
+#   if (!is.numeric(y))
+#     stop("y must be numeric.")
+#
+#   n = nrow(X)
+#   p = ncol(X)
+#   K = ncol(Z)
+#
+#   if (length(y) != n)
+#     stop("length(y) must equal nrow(X).")
+#
+#   if (nrow(Z) != n)
+#     stop("nrow(Z) must equal nrow(X).")
+#
+#   if (is.null(groups_x))
+#     groups_x = seq_len(p)
+#
+#   if (is.null(groups_z))
+#     groups_z = seq_len(K)
+#
+#   groups_x = as.integer(groups_x)
+#   groups_z = as.integer(groups_z)
+#
+#   L = max(groups_x)
+#
+#   pl = tabulate(groups_x)
+#
+#   lam_candidates = numeric(L)
+#
+#   for (l in seq_len(L)) {
+#
+#     idx_l = which(groups_x == l)
+#     p_l = pl[l]
+#     X_l = X[, idx_l, drop = FALSE]
+#     g_l = as.numeric(crossprod(X_l, y)) / n
+#     H_l = crossprod(Z, X_l * matrix(y, n, length(idx_l))) / n
+#     v = c(g_l, as.vector(H_l))
+#
+#     kkt_fun = function(lambda) {
+#
+#       lam1 = lambda * (1 - alpha)
+#       lam2 = lambda * alpha
+#
+#       sv = sign(v) *pmax(abs(v) - lam2, 0)
+#
+#       sqrt(sum(sv^2)) - sqrt(p_l) * lam1
+#     }
+#
+#     upper =
+#       max(abs(v)) /
+#       max(alpha, 1e-8)
+#
+#     while (kkt_fun(upper) > 0)
+#       upper = upper * 2
+#
+#     lam_candidates[l] = uniroot(kkt_fun,
+#                                 lower = 0,
+#                                 upper = upper,
+#                                 tol = 1e-10)$root
+#   }
+#
+#   max(lam_candidates)
+# }
 #' Cross-Validation for SGPL
 #'
 #' Perform K-fold cross-validation for sparse group pliable lasso
@@ -286,8 +322,8 @@ SGPL_CV = function(X, Z, y,
   family = match.arg(family)
   n = nrow(X)
 
-  if (is.null(lambda_seq) & family == "gaussian") {
-    lam_max = compute_lambda_max(X, Z, y, groups_x, groups_z, alpha)
+  if (is.null(lambda_seq)) {
+    lam_max = compute_lambda_max(X, Z, y, groups_x, groups_z, alpha, family)
     lambda_seq = exp(seq(log(lam_max), log(lam_max * 0.005), length.out = 30))
   }
 

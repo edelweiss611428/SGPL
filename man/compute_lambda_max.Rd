@@ -4,7 +4,15 @@
 \alias{compute_lambda_max}
 \title{Compute Maximum Lambda for SGPL}
 \usage{
-compute_lambda_max(X, Z, y, groups_x = NULL, groups_z = NULL, alpha = 0.5)
+compute_lambda_max(
+  X,
+  Z,
+  y,
+  groups_x,
+  groups_z,
+  alpha = 0.5,
+  family = c("gaussian", "binomial")
+)
 }
 \arguments{
 \item{X}{Predictor matrix.}
@@ -18,6 +26,8 @@ compute_lambda_max(X, Z, y, groups_x = NULL, groups_z = NULL, alpha = 0.5)
 \item{groups_z}{Modifier groups.}
 
 \item{alpha}{Mixing parameter.}
+
+\item{family}{Family}
 }
 \value{
 Numeric lambda maximum.
