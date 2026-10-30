@@ -1,4 +1,4 @@
-# Sparse-Group Pliable Lasso
+# Sparse-Group Pliable Lasso <img src="man/figures/logo.png" align="right" height="139" alt="SGPL logo" />
 
 `SGPL` is an R package implementing the **Sparse-Group Pliable Lasso**, a regularised varying-coefficient regression framework for high-dimensional data containing grouped predictors and modifying variables.
 
