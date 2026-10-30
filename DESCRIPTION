@@ -1,22 +1,20 @@
 Package: SGPL
 Type: Package
-Title: Sparse Group Pliable LASSO
-Version: 0.1.0
-Authors@R: 
-    c(
-      person("Minh-Long", "Nguyen",,"edelweiss611428@gmail.com", role = c("aut", "cre")),
-      person("Mohammad-Javad", "Davoudabadi",,"mohammad.davoudabadi@qut.edu.au", role = "aut")
-     )
-Description: Implements sparse group pliable lasso models for
-    learning interactions between predictors and modifying variables
-    under structured sparsity penalties.
+Title: Sparse-Group Pliable Lasso
+Version: 1.0.0
+Authors@R: c(
+    person("Mohammad Javad", "Davoudabadi", role = c("aut", "cre"),
+           email = "mjavad.davodabadi@gmail.com"),
+    person("Minh Long", "Nguyen", role = "aut",
+           email = "edelweiss611428@gmail.com"))
+Description: Fits the sparse-group pliable lasso for Gaussian, logistic and
+    Cox regression by blockwise coordinate descent with exact block proximal
+    updates, with cross-validation along a lambda path.
 License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
-Imports: 
-   Rcpp,
-   stats
-LinkingTo: Rcpp,
-           RcppArmadillo
-Roxygen: list(markdown = TRUE)
+Imports: Rcpp, stats
+LinkingTo: Rcpp, RcppArmadillo
+Suggests: testthat (>= 3.0.0)
+Config/testthat/edition: 3
 RoxygenNote: 7.3.2
+Roxygen: list(markdown = TRUE)

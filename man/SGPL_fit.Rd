@@ -8,7 +8,7 @@ SGPL_fit(
   X,
   Z,
   y,
-  family = c("gaussian", "binomial"),
+  family = c("gaussian", "binomial", "cox"),
   lambda = 0.1,
   alpha = 0.5,
   groups_x = NULL,
@@ -26,57 +26,70 @@ SGPL_fit(
   theta0_init = NULL,
   beta_init = NULL,
   Theta_init = NULL,
-  cached = TRUE
+  cached = TRUE,
+  status = NULL
 )
 }
 \arguments{
-\item{X}{Numeric predictor matrix of dimension \eqn{n \times p}.}
+\item{X}{Numeric predictor matrix of dimension \eqn{n \times p}. No default.}
 
-\item{Z}{Numeric modifying matrix of dimension \eqn{n \times K}.}
+\item{Z}{Numeric modifying matrix of dimension \eqn{n \times K}. No default.}
 
 \item{y}{Numeric response vector of length \eqn{n}. For \code{family = "binomial"},
-this should be a vector containing 0s and 1s.}
+this should be a vector containing 0s and 1s. For \code{family = "cox"},
+this is the vector of observed (positive) times. No default.}
 
-\item{family}{Model specification; either \code{"gaussian"} or \code{"binomial"}.}
+\item{family}{Model specification; \code{"gaussian"}, \code{"binomial"} or \code{"cox"}. Default: \code{"gaussian"}.}
 
-\item{lambda}{Regularisation parameter.}
+\item{lambda}{Regularisation parameter. Default: \code{0.1}.}
 
 \item{alpha}{Mixing parameter between group and lasso penalties.
-Must lie in \code{[0, 1]}.}
+Must lie in \code{[0, 1]}; \eqn{\lambda_1 = \lambda(1-\alpha)} and
+\eqn{\lambda_2 = \lambda\alpha}. The convergence guarantee of the paper
+(Proposition 3) requires \eqn{\alpha < 1}. Default: \code{0.5}.}
 
-\item{groups_x}{Optional predictor group labels.
-Default assigns each predictor to its own group.}
+\item{groups_x}{Optional predictor group labels (positive integers, not
+necessarily consecutive). Default: \code{NULL} (each predictor in its own group).}
 
-\item{groups_z}{Optional modifier group labels.
-Default assigns each modifier to its own group.}
+\item{groups_z}{Optional modifier group labels (positive integers, not
+necessarily consecutive). Default: \code{NULL} (each modifier in its own group).}
 
-\item{max_iter_out}{Maximum outer iterations.}
+\item{max_iter_out}{Maximum outer iterations. Default: \code{200}.}
 
-\item{max_iter_in}{Maximum inner iterations.}
+\item{max_iter_in}{Maximum inner (proximal-gradient) iterations per block visit. Default: \code{50}.}
 
-\item{tol_out}{Outer convergence tolerance.}
+\item{tol_out}{Outer convergence tolerance. Default: \code{1e-6}.}
 
-\item{tol_in}{Inner convergence tolerance.}
+\item{tol_in}{Inner convergence tolerance. Default: \code{1e-6}.}
 
-\item{t_init}{Optional initial step size.}
+\item{t_init}{Optional initial step size. Default: \code{NULL} (uses \eqn{1/L_l}, where
+\eqn{L_l} is the Lipschitz constant of the block gradient).}
 
-\item{bt_factor}{Backtracking shrinkage factor.}
+\item{bt_factor}{Backtracking shrinkage factor. Default: \code{0.5}.}
 
-\item{bt_max}{Maximum backtracking iterations.}
+\item{bt_max}{Maximum backtracking iterations. If no trial step passes the
+sufficient-decrease test, the step is rejected. Default: \code{50}.}
 
-\item{use_screen}{Logical; use KKT screening rules.}
+\item{use_screen}{Logical; use the safe KKT screening rule. Default: \code{TRUE}.}
 
-\item{verbose}{Logical; print optimisation progress.}
+\item{verbose}{Logical; print optimisation progress. Default: \code{TRUE}.}
 
-\item{beta0_init}{Numeric scalar. Optional warm-start main intercept.}
+\item{beta0_init}{Numeric scalar. Optional warm-start main intercept
+(binomial only; ignored for gaussian and cox). Default: \code{NULL} (log-odds of the mean of \code{y}).}
 
-\item{theta0_init}{Numeric vector of length \eqn{K}. Optional warm-start modifier intercept vector.}
+\item{theta0_init}{Numeric vector of length \eqn{K}. Optional warm-start
+modifier intercept vector (binomial and cox; ignored for gaussian). Default: \code{NULL} (zeros).}
 
-\item{beta_init}{Numeric vector. Optional warm-start main effects.}
+\item{beta_init}{Numeric vector. Optional warm-start main effects. Default: \code{NULL} (zeros).}
 
-\item{Theta_init}{Numeric matrix. Optional warm-start interaction effects.}
+\item{Theta_init}{Numeric matrix. Optional warm-start interaction effects. Default: \code{NULL} (zeros).}
 
-\item{cached}{Logical; whether or not to use cached exact version (O(L) faster). Default: TRUE}
+\item{cached}{Logical; whether or not to use the cached implementation
+(faster). \code{FALSE} uses an uncached reference implementation of the
+same algorithm. Default: \code{TRUE}.}
+
+\item{status}{Event indicator (1 = event, 0 = censored); required for
+\code{family = "cox"} and ignored otherwise. Default: \code{NULL}.}
 }
 \value{
 A list containing estimated coefficients and optimization
@@ -84,6 +97,37 @@ diagnostics.
 }
 \description{
 Fit a sparse group pliable lasso (SGPL) model using block-wise
-coordinate-descent with nested proximal updates for either Gaussian
-or Logistic (binomial) response variables.
+coordinate descent with exact block proximal updates (Algorithm 1 of the
+SGPL paper) for Gaussian, logistic (binomial) or Cox proportional hazards
+models.
+}
+\details{
+Each predictor group is updated by proximal-gradient steps. The proximal
+operator of the full block penalty is computed exactly by a Dykstra-like
+proximal algorithm, and the step size is chosen by backtracking with a
+sufficient-decrease test; a step that fails the test is never accepted.
+Groups that satisfy the safe screening rule are set to zero without inner
+iterations. For \code{family = "gaussian"}, the unpenalized coefficients
+\code{(beta0, theta0)} are profiled out and recovered by least squares at
+the end. For \code{"binomial"} and \code{"cox"}, they form an unpenalized
+block that is updated once per outer iteration. For \code{"cox"}, the
+intercept \code{beta0} is absorbed into the baseline hazard and is returned
+as 0, while \code{theta0} is estimated.
+
+The penalty is
+\deqn{\lambda_1\Big\{\sum_j \|(\beta_j,\theta_j)\|_2
+  + \sum_l \sqrt{p_l}\,\|(\beta_l,\Theta_l)\|_2
+  + \sum_l \sum_g w_{lg} \|\theta_{lg}\|_2\Big\}
+  + \lambda_2\Big\{\|\beta\|_1 + \sum_j \|\theta_j\|_1\Big\},}
+with \eqn{w_{lg} = \sqrt{p_l}\sqrt{p_g}/\sqrt{1+K}}, where \eqn{p_l} and
+\eqn{p_g} are the sizes of predictor group \eqn{l} and modifier group \eqn{g}.
+}
+\examples{
+set.seed(1)
+n = 50; p = 4; K = 2
+X = matrix(rnorm(n * p), n, p)
+Z = matrix(rnorm(n * K), n, K)
+y = X[, 1] * (1 + Z[, 1]) + rnorm(n)
+fit = SGPL_fit(X, Z, y, lambda = 0.05, groups_x = c(1, 1, 2, 2), verbose = FALSE)
+fit$beta
 }

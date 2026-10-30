@@ -7,21 +7,32 @@
 SGPL_predict(X, Z, beta, Theta, beta0 = 0, theta0 = NULL)
 }
 \arguments{
-\item{X}{Predictor matrix.}
+\item{X}{Predictor matrix. No default.}
 
-\item{Z}{Modifying matrix.}
+\item{Z}{Modifying matrix. No default.}
 
-\item{beta}{Main effect coefficients.}
+\item{beta}{Main effect coefficients. No default.}
 
-\item{Theta}{Interaction coefficient matrix.}
+\item{Theta}{Interaction coefficient matrix. No default.}
 
-\item{beta0}{Numeric scalar; overall intercept. Default is 0.}
+\item{beta0}{Numeric scalar; overall intercept. Default: \code{0}.}
 
-\item{theta0}{Numeric vector of length \eqn{K}; modifier intercept vector. Default is 0s.}
+\item{theta0}{Numeric vector of length \eqn{K}; modifier intercept vector. Default: \code{NULL} (zeros).}
 }
 \value{
 Numeric prediction vector.
 }
 \description{
-Generate predictions from an SGPL model.
+Generate predictions (linear predictor) from an SGPL model. For
+\code{family = "binomial"} this is the log-odds; for \code{family = "cox"}
+it is the log relative hazard (use \code{beta0 = 0}).
+}
+\examples{
+set.seed(1)
+n = 50; p = 4; K = 2
+X = matrix(rnorm(n * p), n, p)
+Z = matrix(rnorm(n * K), n, K)
+y = X[, 1] * (1 + Z[, 1]) + rnorm(n)
+fit = SGPL_fit(X, Z, y, lambda = 0.05, groups_x = c(1, 1, 2, 2), verbose = FALSE)
+head(SGPL_predict(X, Z, fit$beta, fit$Theta, fit$beta0, fit$theta0))
 }

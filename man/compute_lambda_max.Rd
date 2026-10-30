@@ -11,28 +11,59 @@ compute_lambda_max(
   groups_x,
   groups_z,
   alpha = 0.5,
-  family = c("gaussian", "binomial")
+  family = c("gaussian", "binomial", "cox"),
+  status = NULL
 )
 }
 \arguments{
-\item{X}{Predictor matrix.}
+\item{X}{Predictor matrix. No default.}
 
-\item{Z}{Modifier matrix.}
+\item{Z}{Modifier matrix. No default.}
 
-\item{y}{Response vector.}
+\item{y}{Response vector (observed times for \code{family = "cox"}). No default.}
 
-\item{groups_x}{Predictor groups.}
+\item{groups_x}{Predictor groups. No default.}
 
-\item{groups_z}{Modifier groups.}
+\item{groups_z}{Modifier groups. No default.}
 
-\item{alpha}{Mixing parameter.}
+\item{alpha}{Mixing parameter. Default: \code{0.5}.}
 
-\item{family}{Family}
+\item{family}{Family; \code{"gaussian"}, \code{"binomial"} or \code{"cox"}. Default: \code{"gaussian"}.}
+
+\item{status}{Event indicator; required for \code{family = "cox"}. Default: \code{NULL}.}
 }
 \value{
 Numeric lambda maximum.
 }
 \description{
-Compute the smallest value of lambda such that all coefficients
-are zero.
+Compute a value of lambda at which the zero solution (all penalized
+coefficients equal to zero) is optimal. The unpenalized coefficients are
+first estimated from the null model (least squares, logistic regression or
+Cox regression on \code{Z}). Let \eqn{g_j = (x_j^\top r_0,
+\{Z^\top(x_j \odot r_0)\}^\top)^\top / n} be the null score of predictor
+\eqn{j}, where \eqn{r_0} is the null residual (Gaussian), \eqn{y - \hat\mu_0}
+(binomial) or the null martingale residual (Cox).
+}
+\details{
+For \eqn{\alpha < 1}:
+\itemize{
+\item \code{"gaussian"} uses the conservative starting value of Section 4.3
+of the SGPL paper, \eqn{\max_j \|g_j\|_2 / (1-\alpha)};
+\item \code{"binomial"} and \code{"cox"} use the rule of Supplementary
+Section B, the smallest \eqn{\lambda} with
+\eqn{\|S_{\alpha\lambda}(g_j)\|_2 \le (1-\alpha)\lambda} for all \eqn{j},
+found by bisection. It equals the Gaussian value when \eqn{\alpha = 0}
+and is smaller otherwise.
+}
+Both values are sufficient for the zero solution, but need not be the
+smallest such value. For \eqn{\alpha = 1} (lasso on the augmented design)
+the value is the largest absolute null score.
+}
+\examples{
+set.seed(1)
+n = 50; p = 4; K = 2
+X = matrix(rnorm(n * p), n, p)
+Z = matrix(rnorm(n * K), n, K)
+y = X[, 1] * (1 + Z[, 1]) + rnorm(n)
+compute_lambda_max(X, Z, y, groups_x = c(1, 1, 2, 2), groups_z = c(1, 2))
 }

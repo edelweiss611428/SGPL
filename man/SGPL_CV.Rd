@@ -8,7 +8,7 @@ SGPL_CV(
   X,
   Z,
   y,
-  family = c("gaussian", "binomial"),
+  family = c("gaussian", "binomial", "cox"),
   lambda_seq = NULL,
   alpha = 0.5,
   groups_x = NULL,
@@ -19,45 +19,60 @@ SGPL_CV(
   tol_out = 1e-05,
   tol_in = 1e-05,
   cached = TRUE,
-  warmup = TRUE
+  warmup = TRUE,
+  status = NULL
 )
 }
 \arguments{
-\item{X}{Predictor matrix.}
+\item{X}{Predictor matrix. No default.}
 
-\item{Z}{Modifier matrix.}
+\item{Z}{Modifier matrix. No default.}
 
-\item{y}{Response vector.}
+\item{y}{Response vector (observed times for \code{family = "cox"}). No default.}
 
-\item{family}{Model specification; either \code{"gaussian"} or \code{"binomial"}.}
+\item{family}{Model specification; \code{"gaussian"}, \code{"binomial"} or \code{"cox"}. Default: \code{"gaussian"}.}
 
-\item{lambda_seq}{Optional lambda sequence.}
+\item{lambda_seq}{Optional lambda sequence. Default: \code{NULL} (25 log-spaced values
+from \code{compute_lambda_max()} down to 0.005 times that value).}
 
-\item{alpha}{Mixing parameter.}
+\item{alpha}{Mixing parameter. Default: \code{0.5}.}
 
-\item{groups_x}{Predictor groups.}
+\item{groups_x}{Predictor groups. Default: \code{NULL} (each predictor in its own group).}
 
-\item{groups_z}{Modifier groups.}
+\item{groups_z}{Modifier groups. Default: \code{NULL} (each modifier in its own group).}
 
-\item{nfolds}{Number of folds.}
+\item{nfolds}{Number of folds. Default: \code{5}.}
 
-\item{max_iter_out}{Maximum outer iterations.}
+\item{max_iter_out}{Maximum outer iterations. Default: \code{200}.}
 
-\item{max_iter_in}{Maximum inner iterations.}
+\item{max_iter_in}{Maximum inner iterations. Default: \code{50}.}
 
-\item{tol_out}{Outer convergence tolerance.}
+\item{tol_out}{Outer convergence tolerance. Default: \code{1e-5}.}
 
-\item{tol_in}{Inner convergence tolerance.}
+\item{tol_in}{Inner convergence tolerance. Default: \code{1e-5}.}
 
-\item{cached}{Logical; whether or not to use cached exact version (O(L) faster). Default: TRUE}
+\item{cached}{Logical; whether or not to use the cached implementation (faster). Default: \code{TRUE}.}
 
-\item{warmup}{Logical; whether or not to use warm-up. Default: TRUE}
+\item{warmup}{Logical; whether or not to use warm starts along the lambda path. Default: \code{TRUE}.}
+
+\item{status}{Event indicator; required for \code{family = "cox"}. Default: \code{NULL}.}
 }
 \value{
 Cross-validation results and selected lambdas.
 }
 \description{
 Perform K-fold cross-validation for sparse group pliable lasso
-models using warm starts along the lambda path. Supports both Gaussian
-and binomial families.
+models using warm starts along the lambda path. Supports Gaussian,
+binomial and Cox families. The CV error is the mean squared error
+(gaussian), the binomial deviance (binomial) or the cross-validated
+partial-likelihood deviance of Verweij and van Houwelingen (1993) (cox).
+}
+\examples{
+set.seed(1)
+n = 50; p = 4; K = 2
+X = matrix(rnorm(n * p), n, p)
+Z = matrix(rnorm(n * K), n, K)
+y = X[, 1] * (1 + Z[, 1]) + rnorm(n)
+cv = SGPL_CV(X, Z, y, groups_x = c(1, 1, 2, 2), nfolds = 3)
+cv$lambda_min
 }

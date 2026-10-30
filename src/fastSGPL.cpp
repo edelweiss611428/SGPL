@@ -6,97 +6,19 @@
 using namespace Rcpp;
 using namespace arma;
 
-// Block modifier penalty
-
-inline double compute_block_modifier_penalty(
-    const arma::mat& Theta_l,
-    int G,
-    const arma::vec& pg,
-    const std::vector<arma::uvec>& group_z_indices,
-    double w_denom
-) {
-  double z_grp_l = 0.0;
-  for (int g = 0; g < G; ++g) {
-    const arma::uvec& idx_g = group_z_indices[g];
-    if (idx_g.n_elem == 0) continue;
-
-    double s = arma::accu(arma::square(Theta_l.rows(idx_g)));
-    z_grp_l += (std::sqrt(pg(g)) / w_denom) * std::sqrt(s);
-  }
-  return z_grp_l;
-}
-
-// Block predictive contribution
-
-inline arma::vec compute_block_eta_fast(
-    const arma::mat& X_l,
-    const arma::vec& beta_l,
-    const arma::mat& ZTheta_l
-) {
-  // Uses precomputed ZTheta_l = Z * Theta_l
-  arma::vec eta_l = X_l * beta_l;
-  eta_l += arma::sum(X_l % ZTheta_l, 1);
-  return eta_l;
-}
-
-
-// KKT screening (for Gaussian only)
-
-
-inline bool screen_kkt_gaussian(
-    std::size_t l, bool use_screen, const std::string& family,
-    const arma::mat& X_l, const arma::vec& r_neg_l, const arma::mat& Z,
-    double n, std::size_t p_l,
-    double lam1, double lam2,
-    const arma::uvec& idx_l, const arma::vec& beta_l_tilde, const arma::mat& Theta_l_tilde,
-    arma::vec& beta, arma::mat& Theta, arma::vec& beta2, arma::vec& col_sums_Theta2, arma::mat& ZTheta,
-    arma::vec& eta, const arma::vec& eta_neg_l,
-    arma::vec& joint_grp_vec, arma::vec& mod_grp_vec,
-    double& total_per_pred, double& total_joint_grp, double& total_mod_grp,
-    double& total_l1_b, double& total_l1_t, double& total_penalty
-) {
-  if (!use_screen || family != "gaussian") {
-    return false;
-  }
-
-  arma::vec g_l = (X_l.t() * r_neg_l) / n;
-  arma::mat H_l = (Z.t() * (X_l.each_col() % r_neg_l)) / n;
-
-  arma::vec vv = arma::join_cols(g_l, arma::vectorise(H_l));
-  vv = soft_thresh_vec(vv, lam2);
-
-  if (arma::norm(vv, 2) <= std::sqrt(static_cast<double>(p_l)) * lam1) {
-
-    // Compute penalty change from zeroing out block l
-    double per_pred_old_l = lam1 * arma::accu(arma::sqrt(beta2.elem(idx_l) + col_sums_Theta2.elem(idx_l)));
-    double l1_b_old_l = lam2 * arma::accu(arma::abs(beta_l_tilde));
-    double l1_t_old_l = lam2 * arma::accu(arma::abs(Theta_l_tilde));
-
-    total_per_pred  -= per_pred_old_l;
-    total_joint_grp -= joint_grp_vec(l);
-    joint_grp_vec(l) = 0.0;
-
-    total_mod_grp   -= mod_grp_vec(l);
-    mod_grp_vec(l)   = 0.0;
-
-    total_l1_b -= l1_b_old_l;
-    total_l1_t -= l1_t_old_l;
-
-    total_penalty = total_per_pred + total_joint_grp + total_mod_grp + total_l1_b + total_l1_t;
-
-    beta.elem(idx_l).zeros();
-    Theta.cols(idx_l).zeros();
-    beta2.elem(idx_l).zeros();
-    col_sums_Theta2.elem(idx_l).zeros();
-    ZTheta.cols(idx_l).zeros();
-
-    eta = eta_neg_l;
-    return true;
-  }
-  return false;
-}
-
-// Optimisation algorithm
+// Cached implementation of Algorithm 1 (exact block proximal updates).
+//
+// Changes from the previous version (four-step shrinkage):
+//   * the block proximal operator is computed exactly (Dykstra-like algorithm);
+//   * backtracking uses the quadratic upper-bound (sufficient-decrease) test,
+//     and a step that fails the test is NEVER accepted (the cache is always
+//     consistent with the coefficients);
+//   * step sizes start from 1 / L_l with a block-specific Lipschitz constant;
+//   * safe screening (Corollary 1(ii)) is used for all three families;
+//   * gaussian: (beta0, theta0) are profiled out and recovered at the end;
+//     binomial / cox: the unpenalized block is updated once per outer iteration
+//     (cox: theta0 only; beta0 is absorbed into the baseline hazard);
+//   * family = "cox" added (y = observed times, status_r = event indicators).
 
 // [[Rcpp::export]]
 Rcpp::List fast_sgpl_fit_cpp6(
@@ -113,116 +35,125 @@ Rcpp::List fast_sgpl_fit_cpp6(
     Rcpp::Nullable<arma::mat> Theta_init_r = R_NilValue,
     Rcpp::Nullable<double> beta0_init_r = R_NilValue,
     Rcpp::Nullable<arma::vec> theta0_init_r = R_NilValue,
-    std::string family = "gaussian"
+    std::string family = "gaussian",
+    Rcpp::Nullable<arma::vec> status_r = R_NilValue,
+    double prox_tol = 1e-10, int prox_maxit = 10000
 ) {
-  int n = X.n_rows;
-  int p = X.n_cols;
-  int K = Z.n_cols;
+  const int n = X.n_rows;
+  const int p = X.n_cols;
+  const int K = Z.n_cols;
 
-  // --- Dimension Checks ---
+  // --- Checks ---
   if ((int)Z.n_rows != n) Rcpp::stop("X and Z must have same number of rows");
   if ((int)y.n_elem != n) Rcpp::stop("length(y) must equal nrow(X)");
+  if (family != "gaussian" && family != "binomial" && family != "cox")
+    Rcpp::stop("family must be 'gaussian', 'binomial' or 'cox'");
+  if (alpha < 0.0 || alpha > 1.0) Rcpp::stop("alpha must lie in [0, 1]");
+  if (lambda < 0.0) Rcpp::stop("lambda must be non-negative");
+  const bool is_gauss = (family == "gaussian");
 
-  // --- Groups Initialization ---
+  CoxData cox;
+  if (family == "cox") {
+    if (status_r.isNull()) Rcpp::stop("status must be supplied for family = 'cox'");
+    arma::vec status = Rcpp::as<arma::vec>(status_r);
+    if ((int)status.n_elem != n) Rcpp::stop("length(status) must equal nrow(X)");
+    cox = make_cox_data(y, status);
+  }
+  const CoxData* coxp = (family == "cox") ? &cox : nullptr;
+
+  // --- Groups ---
   arma::uvec groups_x = groups_x_r.isNull() ? arma::linspace<arma::uvec>(1, p, p) : Rcpp::as<arma::uvec>(groups_x_r);
   arma::uvec groups_z = groups_z_r.isNull() ? arma::linspace<arma::uvec>(1, K, K) : Rcpp::as<arma::uvec>(groups_z_r);
-
   if ((int)groups_x.n_elem != p) Rcpp::stop("groups_x has incorrect length");
   if ((int)groups_z.n_elem != K) Rcpp::stop("groups_z has incorrect length");
 
-  int L = groups_x.max();
-  int G = groups_z.max();
-  double w_denom = std::sqrt(1.0 + K);
-
-  arma::vec pl(L, arma::fill::zeros);
-  arma::vec pg(G, arma::fill::zeros);
+  const int L = groups_x.max();
+  const int G = groups_z.max();
 
   std::vector<arma::uvec> group_x_indices(L);
-  for (int l = 1; l <= L; ++l) {
-    group_x_indices[l - 1] = arma::find(groups_x == l);
-    pl(l - 1) = group_x_indices[l - 1].n_elem;
-  }
-
+  for (int l = 1; l <= L; ++l) group_x_indices[l - 1] = arma::find(groups_x == (arma::uword)l);
   std::vector<arma::uvec> group_z_indices(G);
-  for (int g = 1; g <= G; ++g) {
-    group_z_indices[g - 1] = arma::find(groups_z == g);
-    pg(g - 1) = group_z_indices[g - 1].n_elem;
-  }
+  for (int g = 1; g <= G; ++g) group_z_indices[g - 1] = arma::find(groups_z == (arma::uword)g);
 
-  // Param initialisation
+  // --- Parameters ---
   arma::vec beta = beta_init_r.isNull() ? arma::vec(p, arma::fill::zeros) : Rcpp::as<arma::vec>(beta_init_r);
   arma::mat Theta = Theta_init_r.isNull() ? arma::mat(K, p, arma::fill::zeros) : Rcpp::as<arma::mat>(Theta_init_r);
+  if ((int)beta.n_elem != p) Rcpp::stop("beta_init has incorrect length");
+  if ((int)Theta.n_rows != K || (int)Theta.n_cols != p) Rcpp::stop("Theta_init has incorrect dimensions");
 
   double beta0 = 0.0;
   arma::vec theta0(K, arma::fill::zeros);
-
-  if (beta0_init_r.isNotNull()) {
-    beta0 = Rcpp::as<double>(beta0_init_r);
-  } else {
-    if (family == "binomial") {
+  if (family == "binomial") {
+    if (beta0_init_r.isNotNull()) {
+      beta0 = Rcpp::as<double>(beta0_init_r);
+    } else {
       double p_bar = std::min(std::max(arma::mean(y), 1e-5), 1.0 - 1e-5);
       beta0 = std::log(p_bar / (1.0 - p_bar));
-    } else if (family == "gaussian") {
-      beta0 = arma::mean(y);
     }
   }
-
-  if (theta0_init_r.isNotNull()) {
-    if ((int)theta0.n_elem != K) Rcpp::stop("theta0_init has incorrect length");
+  if (family != "gaussian" && theta0_init_r.isNotNull()) {
     theta0 = Rcpp::as<arma::vec>(theta0_init_r);
+    if ((int)theta0.n_elem != K) Rcpp::stop("theta0_init has incorrect length");
   }
+  // gaussian: (beta0, theta0) are profiled out; beta0_init / theta0_init are ignored.
 
+  const double lam1 = lambda * (1.0 - alpha);
+  const double lam2 = lambda * alpha;
+  const bool screen_ok = use_screen && lam1 > 0.0;
 
+  // --- Profiling (gaussian) ---
+  arma::mat Q;
+  if (is_gauss) Q = arma::orth(arma::join_rows(arma::ones<arma::vec>(n), Z));
 
-  double lam1 = lambda * (1.0 - alpha);
-  double lam2 = lambda * alpha;
-  double t_init = compute_t_init(X, Z, t_init_r, family);
-
-
-  // Cache matrix for Z * Theta
-  arma::mat ZTheta = Z * Theta;
-
-  // CURRENT VALUES
-
-  // Cached beta2 and col_sums_Theta2
-  arma::vec beta2 = arma::square(beta);
-  arma::vec col_sums_Theta2 = arma::sum(arma::square(Theta), 0).t();
-
-  // Track individual component sums for fast scalar updates
-  double total_per_pred = lam1 * arma::accu(arma::sqrt(beta2 + col_sums_Theta2));
-
-  arma::vec joint_grp_vec(L, arma::fill::zeros);
+  // --- Block data ---
+  std::vector<arma::mat> X_blocks(L);
+  std::vector<SGPLBlock> blocks(L);
+  arma::vec Lip(L, arma::fill::zeros);
   for (int l = 0; l < L; ++l) {
     const arma::uvec& idx = group_x_indices[l];
-    if (idx.n_elem > 0) {
-      double svec = arma::accu(beta2.elem(idx)) + arma::accu(col_sums_Theta2.elem(idx));
-      joint_grp_vec(l) = lam1 * std::sqrt(pl(l)) * std::sqrt(svec);
-    }
+    int p_l = idx.n_elem;
+    if (p_l == 0) continue;
+    X_blocks[l] = X.cols(idx);
+    blocks[l] = make_sgpl_block(p_l, K, group_z_indices);
+    Lip(l) = family_curvature(family) * block_lipschitz(X_blocks[l], Z, Q, is_gauss, p_l, K);
   }
-  double total_joint_grp = arma::accu(joint_grp_vec);
+  const bool user_t = t_init_r.isNotNull();
+  const double t_user = user_t ? Rcpp::as<double>(t_init_r) : 0.0;
 
-  arma::vec mod_grp_vec(L, arma::fill::zeros);
+  // --- Caches ---
+  arma::mat ZTheta = Z * Theta;                         // n x p
+  arma::vec eta_pen(n, arma::fill::zeros);              // X~ gamma
+  {
+    arma::mat M = ZTheta;
+    M.each_row() += beta.t();
+    eta_pen = arma::sum(X % M, 1);
+  }
+  arma::vec pen_vec(L, arma::fill::zeros);
   for (int l = 0; l < L; ++l) {
-    const arma::uvec& idx_l = group_x_indices[l];
-    if (idx_l.n_elem == 0) continue;
-    mod_grp_vec(l) = lam1 * compute_block_modifier_penalty(Theta.cols(idx_l), G, pg, group_z_indices, w_denom);
+    const arma::uvec& idx = group_x_indices[l];
+    if (idx.n_elem == 0) continue;
+    pen_vec(l) = block_penalty_sgpl(pack_block(beta.elem(idx), Theta.cols(idx)), blocks[l], lam1, lam2);
   }
 
-  double total_mod_grp = arma::accu(mod_grp_vec);
-  double total_l1_b = lam2 * arma::accu(arma::abs(beta));
-  double total_l1_t = lam2 * arma::accu(arma::abs(Theta));
+  arma::vec ytil, r, offset, eta;
+  if (is_gauss) {
+    ytil = project_out(Q, y);
+    r = ytil - project_out(Q, eta_pen);                 // profiled residual
+  } else {
+    offset = beta0 + Z * theta0;
+    eta = offset + eta_pen;
+  }
 
-  // Base total penalty
-  double total_penalty = total_per_pred + total_joint_grp + total_mod_grp + total_l1_b + total_l1_t;
+  auto current_loss = [&]() {
+    return is_gauss ? 0.5 * arma::dot(r, r) / n : glm_loss(family, y, coxp, eta);
+  };
 
-  // Global predictor
-  arma::vec eta = predict_sgpl_cpp(X, Z, beta, Theta, beta0, theta0);
+  std::vector<double> obj_path;
+  bool converged = false, monotone = true;
+  int n_iter = max_iter_out, bt_failures = 0, prox_cap_hits = 0, n_screened = 0;
+  double obj_prev = current_loss() + arma::accu(pen_vec);
 
-  arma::vec obj_path(max_iter_out);
-  bool converged = false;
-  int n_iter = max_iter_out;
-
-  // Outer loop
+  // --- Outer loop ---
   for (int iter_out = 0; iter_out < max_iter_out; ++iter_out) {
 
     arma::vec beta_old = beta;
@@ -230,223 +161,161 @@ Rcpp::List fast_sgpl_fit_cpp6(
     double beta0_old = beta0;
     arma::vec theta0_old = theta0;
 
-    // Intercept updates
-    if (iter_out > 0 || (beta0_init_r.isNull() && theta0_init_r.isNull())) {
-      eta -= (beta0 + Z * theta0);
-      if (family == "gaussian") {
-        update_intercepts_gaussian(X, Z, y, beta, Theta, beta0, theta0);
-      } else if (family == "binomial") {
-        arma::mat M = Z * Theta;
-        M.each_row() += beta.t();
-        arma::vec eta_pen = arma::sum(X % M, 1);
-        update_intercepts_logit(Z, y, eta_pen, beta0, theta0); //future version allow users to input tolerance for irls solver
-      }
-      eta += (beta0 + Z * theta0);
+    // Unpenalized block (binomial / cox), with the penalized fit held fixed
+    if (family == "binomial") {
+      update_intercepts_logit(Z, y, eta_pen, beta0, theta0);
+    } else if (family == "cox") {
+      update_intercepts_cox(cox, Z, eta_pen, theta0);
+    }
+    if (!is_gauss) {
+      offset = beta0 + Z * theta0;
+      eta = offset + eta_pen;
     }
 
     // Loop over predictor groups
     for (int l = 0; l < L; ++l) {
-
-
       const arma::uvec& idx_l = group_x_indices[l];
-      int p_l = idx_l.n_elem;
+      const int p_l = idx_l.n_elem;
       if (p_l == 0) continue;
+      const arma::mat& X_l = X_blocks[l];
+      const SGPLBlock& B = blocks[l];
 
-      arma::mat X_l = X.cols(idx_l);
-      arma::vec beta_l_tilde = beta.elem(idx_l);
-      arma::mat Theta_l_tilde = Theta.cols(idx_l);
-      arma::mat ZTheta_l = ZTheta.cols(idx_l); // Fetch cached ZTheta columns
+      arma::vec v = pack_block(beta.elem(idx_l), Theta.cols(idx_l));
+      arma::vec u_old = X_l * beta.elem(idx_l) + arma::sum(X_l % ZTheta.cols(idx_l), 1);
 
-      arma::vec eta_l_old = compute_block_eta_fast(X_l, beta_l_tilde, ZTheta_l);
-      arma::vec eta_neg_l = eta - eta_l_old;
-      arma::vec r_neg_l = y - eta_neg_l;
-      arma::vec eta_l_current = eta;
+      // Base quantities excluding block l
+      arma::vec r_minus, eta_minus;
+      if (is_gauss) r_minus = r + project_out(Q, u_old);
+      else eta_minus = eta - u_old;
 
-      // can modify objects if kkt conditions are met
-      bool skipped = screen_kkt_gaussian(
-        l, use_screen, family, X_l, r_neg_l, Z, n, p_l, lam1, lam2,
-        idx_l, beta_l_tilde, Theta_l_tilde, beta, Theta, beta2,
-        col_sums_Theta2, ZTheta, eta_l_current, eta_neg_l, joint_grp_vec,
-        mod_grp_vec, total_per_pred, total_joint_grp, total_mod_grp,
-        total_l1_b, total_l1_t, total_penalty
-      );
-
-      if(skipped){
-        continue;
+      // Safe screening (Corollary 1(ii))
+      if (screen_ok) {
+        arma::vec c_l = is_gauss
+          ? arma::vec(block_crossprod(X_l, Z, r_minus) / n)
+          : arma::vec(-block_crossprod(X_l, Z, glm_psi(family, y, coxp, eta_minus)));
+        if (arma::norm(soft_thresh_vec(c_l, lam2), 2) <= std::sqrt((double)p_l) * lam1) {
+          beta.elem(idx_l).zeros();
+          Theta.cols(idx_l).zeros();
+          ZTheta.cols(idx_l).zeros();
+          eta_pen -= u_old;
+          if (is_gauss) r = r_minus; else eta = eta_minus;
+          pen_vec(l) = 0.0;
+          ++n_screened;
+          continue;
+        }
       }
 
-      double t_l = t_init;
+      // Proximal-gradient steps on block l
+      arma::vec u = u_old;
+      arma::vec r_cur, eta_cur;
+      double f_cur;
+      if (is_gauss) {
+        r_cur = r;
+        f_cur = 0.5 * arma::dot(r_cur, r_cur) / n;
+      } else {
+        eta_cur = eta;
+        f_cur = glm_loss(family, y, coxp, eta_cur);
+      }
 
-      // Inner loop
       for (int iter_in = 0; iter_in < max_iter_in; ++iter_in) {
+        arma::vec psi = is_gauss ? arma::vec(-r_cur / n) : glm_psi(family, y, coxp, eta_cur);
+        arma::vec grad = block_crossprod(X_l, Z, psi);
 
-        arma::vec beta_l_old_in = beta_l_tilde;
-        arma::mat Theta_l_old_in = Theta_l_tilde;
-        // arma::vec eta_l_current = eta_neg_l + compute_block_eta_fast(X_l, beta_l_tilde, ZTheta_l);
+        double t_l = user_t ? t_user : 1.0 / Lip(l);
+        bool accepted = false;
+        arma::vec cand, d, u_c, r_c, eta_c;
+        double f_c = f_cur;
 
-        arma::vec gb = gradient_smooth_loss_beta(X_l, y, eta_l_current, n, family);
-        arma::mat gT = gradient_smooth_loss_theta(X_l, Z, y, eta_l_current, p_l, K, n, family);
-
-        arma::vec beta_l_new(p_l);
-        arma::mat Theta_l_new(K, p_l);
-
-        // Cache current old penalty metrics specific to block l (this is a bit inefficient - computed twice)
-        // Future versions could improve this step and the part where we compute eta_l_current (empirical
-        // evidence shows ~ 10% gain in computational efficiency).
-
-        double per_pred_old_l = lam1 * arma::accu(arma::sqrt(beta2.elem(idx_l) + col_sums_Theta2.elem(idx_l)));
-        double joint_grp_old_l = joint_grp_vec(l);
-        double mod_grp_old_l = mod_grp_vec(l);
-        double l1_b_old_l = lam2 * arma::accu(arma::abs(beta_l_tilde));
-        double l1_t_old_l = lam2 * arma::accu(arma::abs(Theta_l_tilde));
-
-        double loss_curr = (family == "gaussian") ? compute_gaussian_loss(y, eta_l_current)
-          : compute_logistic_loss(y, eta_l_current);
-        double obj_curr = loss_curr + total_penalty;
-
-        // Backtracking line search
         for (int bt = 0; bt < bt_max; ++bt) {
-
-          arma::vec beta_try = soft_thresh_vec(beta_l_tilde - t_l * gb, t_l * lam2);
-          arma::mat Theta_try = soft_thresh_mat(Theta_l_tilde - t_l * gT, t_l * lam2);
-
-          // Predictor block shrinkage
-          for (int jj = 0; jj < p_l; ++jj) {
-            arma::vec vv = arma::join_cols(arma::vec({beta_try(jj)}), Theta_try.col(jj));
-            vv = block_soft(vv, t_l * lam1);
-            beta_try(jj) = vv(0);
-            Theta_try.col(jj) = vv.subvec(1, K);
+          int pit = 0;
+          cand = prox_sgpl_block(v - t_l * grad, B, t_l * lam1, t_l * lam2, prox_tol, prox_maxit, pit);
+          if (pit >= prox_maxit) ++prox_cap_hits;
+          d = cand - v;
+          u_c = block_fit(X_l, Z, cand, p_l, K);
+          if (is_gauss) {
+            r_c = r_minus - project_out(Q, u_c);
+            f_c = 0.5 * arma::dot(r_c, r_c) / n;
+          } else {
+            eta_c = eta_minus + u_c;
+            f_c = glm_loss(family, y, coxp, eta_c);
           }
-
-          // Modifier group shrinkage
-          for (int g = 0; g < G; ++g) {
-            const arma::uvec& idxg = group_z_indices[g];
-            int ng = idxg.n_elem;
-            if (ng == 0) continue;
-
-            arma::vec vv = arma::vectorise(Theta_try.rows(idxg));
-            double w = std::sqrt(pg(g)) / w_denom;
-            vv = block_soft(vv, t_l * lam1 * w);
-            Theta_try.rows(idxg) = arma::reshape(vv, ng, p_l);
-          }
-
-          // Full group shrink
-          arma::vec vv = arma::join_cols(beta_try, arma::vectorise(Theta_try));
-          vv = block_soft(vv, t_l * lam1 * std::sqrt((double)p_l));
-
-          beta_l_new = vv.head(p_l);
-          Theta_l_new = arma::reshape(vv.tail(K * p_l), K, p_l);
-
-          // Candidate ZTheta matrix computed ONCE per step
-          arma::mat ZTheta_l_cand = Z * Theta_l_new;
-
-          // Compute new block local penalties in O(K * p_l)
-          arma::vec beta2_l_cand = arma::square(beta_l_new);
-          arma::vec col_sums_Theta2_l_cand = arma::sum(arma::square(Theta_l_new), 0).t();
-
-          double per_pred_cand_l = lam1 * arma::accu(arma::sqrt(beta2_l_cand + col_sums_Theta2_l_cand));
-          double joint_grp_cand_l = lam1 * std::sqrt(pl(l)) * std::sqrt(arma::accu(beta2_l_cand) + arma::accu(col_sums_Theta2_l_cand));
-          double mod_grp_cand_l = lam1 * compute_block_modifier_penalty(Theta_l_new, G, pg, group_z_indices, w_denom);
-          double l1_b_cand_l = lam2 * arma::accu(arma::abs(beta_l_new));
-          double l1_t_cand_l = lam2 * arma::accu(arma::abs(Theta_l_new));
-
-          // Instant O(1) candidate penalty check via delta subtraction/addition
-          double total_penalty_cand = total_penalty
-          - per_pred_old_l + per_pred_cand_l
-          - joint_grp_old_l + joint_grp_cand_l
-          - mod_grp_old_l + mod_grp_cand_l
-          - l1_b_old_l + l1_b_cand_l
-          - l1_t_old_l + l1_t_cand_l;
-
-          arma::vec eta_cand = eta_neg_l + compute_block_eta_fast(X_l, beta_l_new, ZTheta_l_cand);
-          double loss_cand = (family == "gaussian") ? compute_gaussian_loss(y, eta_cand)
-            : compute_logistic_loss(y, eta_cand);
-
-          double obj_cand = loss_cand + total_penalty_cand;
-
-          if (obj_cand <= obj_curr + 1e-12) {
-
-            // Commit delta changes permanently to global tracked metrics
-            total_per_pred += (per_pred_cand_l - per_pred_old_l);
-            joint_grp_vec(l) = joint_grp_cand_l;
-            total_joint_grp += (joint_grp_cand_l - joint_grp_old_l);
-            mod_grp_vec(l) = mod_grp_cand_l;
-            total_mod_grp += (mod_grp_cand_l - mod_grp_old_l);
-            total_l1_b += (l1_b_cand_l - l1_b_old_l);
-            total_l1_t += (l1_t_cand_l - l1_t_old_l);
-
-            total_penalty = total_penalty_cand;
-
-            beta2.elem(idx_l) = beta2_l_cand;
-            col_sums_Theta2.elem(idx_l) = col_sums_Theta2_l_cand;
-
-            // Commit candidate ZTheta slice to global cache
-            ZTheta_l = ZTheta_l_cand;
-            ZTheta.cols(idx_l) = ZTheta_l_cand;
-            eta_l_current = eta_cand;
+          double bound = f_cur + arma::dot(grad, d) + 0.5 * arma::dot(d, d) / t_l;
+          if (f_c <= bound + 1e-12 * std::max(1.0, std::abs(f_cur))) {
+            accepted = true;
             break;
           }
           t_l *= bt_factor;
         }
 
-        // This is a potential source of error. The algorithm still accepts new beta, Theta even if
-        // backtracking fails however no caching is updated (due to scope difference this requires some
-        // rewriting of the code. However, this is unlikely to happen given that backtracking will eventually
-        // leads to a small enough t). Still, this still requires fixing in future versions.
+        if (!accepted) {          // never accept a step that fails the test
+          ++bt_failures;
+          break;
+        }
 
-        beta_l_tilde = beta_l_new;
-        Theta_l_tilde = Theta_l_new;
-
-        double delta_in = std::max(
-          arma::max(arma::abs(beta_l_tilde - beta_l_old_in)),
-          arma::max(arma::vectorise(arma::abs(Theta_l_tilde - Theta_l_old_in)))
-        );
-
+        double delta_in = arma::norm(d, "inf");
+        v = cand;
+        u = u_c;
+        f_cur = f_c;
+        if (is_gauss) r_cur = r_c; else eta_cur = eta_c;
         if (delta_in < tol_in) break;
       }
 
-      // Accept block parameter update
-      beta.elem(idx_l) = beta_l_tilde;
-      Theta.cols(idx_l) = Theta_l_tilde;
-
-      // Sync global linear predictor using cached ZTheta_l
-      eta = eta_neg_l + compute_block_eta_fast(X_l, beta_l_tilde, ZTheta_l);
+      // Commit block l (caches stay consistent with the coefficients)
+      arma::vec beta_l;
+      arma::mat Theta_l;
+      unpack_block(v, p_l, K, beta_l, Theta_l);
+      beta.elem(idx_l) = beta_l;
+      Theta.cols(idx_l) = Theta_l;
+      ZTheta.cols(idx_l) = Z * Theta_l;
+      eta_pen += u - u_old;
+      if (is_gauss) r = r_cur; else eta = eta_cur;
+      pen_vec(l) = block_penalty_sgpl(v, B, lam1, lam2);
     }
 
-    // Check outer convergence
-    double current_loss = (family == "gaussian") ? compute_gaussian_loss(y, eta)
-      : compute_logistic_loss(y, eta);
-    obj_path(iter_out) = current_loss + total_penalty;
+    // Outer convergence
+    double obj = current_loss() + arma::accu(pen_vec);
+    if (obj > obj_prev + 1e-10 * std::max(1.0, std::abs(obj_prev))) monotone = false;
+    obj_prev = obj;
+    obj_path.push_back(obj);
 
-    double delta_out = std::max({
+    double delta_out = std::max(
       arma::max(arma::abs(beta - beta_old)),
-      arma::max(arma::vectorise(arma::abs(Theta - Theta_old))),
-      std::abs(beta0 - beta0_old),
-      arma::max(arma::abs(theta0 - theta0_old))
-    });
+      arma::max(arma::vectorise(arma::abs(Theta - Theta_old)))
+    );
+    if (!is_gauss) {
+      delta_out = std::max(delta_out, std::abs(beta0 - beta0_old));
+      if (K > 0) delta_out = std::max(delta_out, arma::max(arma::abs(theta0 - theta0_old)));
+    }
 
     if (verbose && ((iter_out + 1) % 10 == 0 || iter_out == 0)) {
-      Rcout << "Outer " << (iter_out + 1) << " obj=" << obj_path(iter_out) << " delta=" << delta_out << "\n";
+      Rcout << "Outer " << (iter_out + 1) << " obj=" << obj << " delta=" << delta_out << "\n";
     }
 
-    if (delta_out < tol_out && iter_out > 0) {
+    if (delta_out < tol_out) {   // Algorithm 1, line 26
       converged = true;
       n_iter = iter_out + 1;
       break;
     }
   }
 
+  // Recover the profiled coefficients (gaussian)
+  if (is_gauss) update_intercepts_gaussian(X, Z, y, beta, Theta, beta0, theta0);
+
   return Rcpp::List::create(
     Named("beta") = beta,
     Named("Theta") = Theta,
     Named("beta0") = beta0,
     Named("theta0") = theta0,
-    Named("obj_path") = obj_path.head(n_iter),
+    Named("obj_path") = obj_path,
     Named("converged") = converged,
     Named("n_iter") = n_iter,
     Named("lambda") = lambda,
     Named("alpha") = alpha,
     Named("groups_x") = groups_x,
-    Named("groups_z") = groups_z
+    Named("groups_z") = groups_z,
+    Named("monotone") = monotone,
+    Named("bt_failures") = bt_failures,
+    Named("prox_cap_hits") = prox_cap_hits,
+    Named("n_screened") = n_screened
   );
 }
